@@ -11,10 +11,10 @@ Clients must send `Origin: <PLATFORM_URL>` for OAuth form requests and Worker up
 2. Submit an asset manifest to `/api/v1/apps/{appId}/assets-upload-session`.
 3. Upload each missing hash to the returned session's asset endpoint. The API verifies both bytes and declared size.
 4. Upload the Worker as multipart data to `/api/v1/apps/{appId}/worker` with a UUID `Idempotency-Key` header. Include one JSON `metadata` field and file parts named after their modules.
-5. Follow the app's deployment history and events. An upload is queued, not active, until its agent reports successful activation.
+5. Follow the app's deployment history and events from queueing through successful activation by the agent.
 
 Upload sessions expire after one hour. Repeating an identical publish within its valid session returns the original deployment. A session's Worker content is immutable. Asset hashes follow Wrangler's BLAKE3 algorithm over base64 content plus the case-sensitive file extension; modules use SHA-256. Preview apps have separate identities and artifact prefixes.
 
-Rollback queues a retained artifact from the same app. It does not restore older database or file contents. Deletion marks the app unwritable and queues teardown after earlier jobs; management records and artifacts are removed after the agent confirms teardown.
+Rollback queues a retained code artifact from the same app while preserving its current database and files. Deletion marks the app unwritable and queues teardown after earlier jobs; management records and artifacts are removed after the agent confirms teardown.
 
 See [CLI authentication](/reference/authentication) for credentials, [CLI reference](/reference/cli) for command output, and [runtime](/reference/runtime) for activation and removal behavior.

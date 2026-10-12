@@ -22,9 +22,9 @@ in and exercise the change. Repeating the command updates the same preview and
 preserves its data. Without `--name`, the CLI derives a name from the Git branch;
 use an explicit name outside Git or with a detached HEAD.
 
-Previews have separate databases and files. On builds supporting app access
-groups, they inherit the parent's rule. They do not copy its data, network
-permissions or connector grants.
+Previews start with their own empty databases and file storage. On builds supporting
+app access groups, they inherit the parent's rule. Configure network permissions
+and connector grants separately for each preview.
 
 Preview URLs use an extra hostname label, such as `review.notes.apps.example.com`.
 The operator must provide DNS and TLS for that hostname. A successful deployment
@@ -36,13 +36,13 @@ confirms app activation; initial certificate issuance may still be pending.
 widefleet deploy
 ```
 
-This builds and publishes the current project to the app named in `wrangler.jsonc`.
-It does not promote or copy the preview's database. Open the printed app URL and
-verify the changed behavior. Code deployments preserve existing data.
+This builds and publishes the current project to the app named in `wrangler.jsonc`,
+preserving that app's existing data. Open the printed app URL and verify the changed
+behavior.
 
 For scripts, `widefleet deploy --json` returns the completed deployment, including
 `appId`, deployment `id`, `status` and `url`. Build output and progress go to stderr.
-With `--no-wait`, the result only confirms queueing; it does not confirm activation.
+With `--no-wait`, the result reports the queued deployment; activation follows asynchronously.
 
 ## Inspect a failure
 

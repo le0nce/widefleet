@@ -17,8 +17,8 @@ widefleet apps
 widefleet access
 ```
 
-`apps` lists the apps you can manage, including their IDs. `access` reads the app
-named in `wrangler.jsonc`; it does not change who can open the app.
+`apps` lists the apps you can manage, including their IDs. `access` shows the
+access rules for the app named in `wrangler.jsonc`.
 
 ## Choose who can open it
 
@@ -54,9 +54,9 @@ widefleet catalog publish APP_UUID
 widefleet catalog list
 ```
 
-Only original apps with an active deployment can be listed; previews cannot. Colleagues can
-find it in **App catalog** and follow its launch URL. Listing an app does not grant
-management access or bypass its SSO and group rules. Use
+Original apps with an active deployment can be listed. Colleagues can
+find them in **App catalog** and follow their launch URLs, subject to the app's
+SSO and group rules. Management permissions remain separate. Use
 `widefleet catalog unpublish APP_UUID` to withdraw the listing without deleting the app.
 
 ## Verify access
@@ -66,7 +66,7 @@ the allowed groups is denied. After changing directory memberships, sign in agai
 existing SSO sessions can retain earlier group claims.
 
 If access activation fails, inspect `widefleet access` and the reported error. The
-last installed rules can remain active; a saved change is not proof of enforcement.
+last installed rules can remain active until the change is successfully applied.
 After the operator resolves the cause, save the intended rules again and verify.
 
 Next, [publish a preview or update the app](/guides/deployments).

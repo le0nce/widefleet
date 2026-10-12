@@ -35,7 +35,7 @@ widefleet access set --all-authenticated
 ```
 
 `set` replaces the complete list. Every existing and future preview inherits the
-same rule automatically; there is no separate preview setting. An empty command
+same rule automatically. An empty command
 is rejected: use `--all-authenticated` to explicitly remove the group restriction
 while retaining company SSO. Group IDs and `--all-authenticated` are mutually exclusive.
 
@@ -46,7 +46,7 @@ Writing on a preview is rejected with a reference to its original app.
 
 Changes wait for the app and its published previews to activate. Apps without a
 deployment report `saved` without waiting for publication. `--no-wait` returns
-after saving; it does not confirm activation. Failed activation on the app or a
+after saving, while activation continues asynchronously. Failed activation on the app or a
 preview exits nonzero, as does a newer policy superseding the waiting command.
 `show` displays the app's groups, inheritance and each preview's activation status.
 `--json` returns the complete API state; redirected output is JSON by default.
@@ -76,11 +76,9 @@ continue to use their existing capability boundaries; they are not browser SSO
 requests. Resource-level permissions inside an app remain the app's responsibility.
 
 Group memberships come from the existing SSO session. The current installation
-uses a one-hour cookie without refresh, so directory changes do not immediately
-revoke an existing session. This feature does not add live directory checks or
-session revocation. A policy change does apply to subsequent requests in an
-existing session after activation. Already delivered data and established
-connections cannot be recalled by changing a rule.
+uses a one-hour cookie without refresh, so directory changes take effect at the
+next sign-in. An activated policy change applies to subsequent requests in an
+existing session. Established connections continue under their earlier authorization.
 
 ## API
 

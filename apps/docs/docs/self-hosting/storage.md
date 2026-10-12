@@ -3,7 +3,7 @@ title: Storage backends
 description: Configure artifact and fleet storage, credentials and existing data.
 ---
 
-The control plane and deployment agent support S3-compatible storage, Azure Blob Storage and Google Cloud Storage. S3 remains the default when the provider variables are omitted. The default Compose installation uses RustFS. Maintained [Compose service selections](/self-hosting/external-services) connect the same installation to external S3, Azure Blob or GCS. They consume existing resources; they do not provision cloud infrastructure or migrate existing data.
+The control plane and deployment agent support S3-compatible storage, Azure Blob Storage and Google Cloud Storage. S3 remains the default when the provider variables are omitted. The default Compose installation uses RustFS. Maintained [Compose service selections](/self-hosting/external-services) connect the same installation to existing external S3, Azure Blob or GCS resources. See [initialization and existing data](#initialization-and-existing-data) when changing storage.
 
 | Backend              | Control plane            | Fleet runtime                |
 | -------------------- | ------------------------ | ---------------------------- |
@@ -47,7 +47,7 @@ The agent rejects settings for an unselected provider. It supplies the native bu
 
 When authentication uses `AZURE_FEDERATED_TOKEN_FILE` or `GOOGLE_APPLICATION_CREDENTIALS`, also set `FLEET_CREDENTIAL_HOST_FILE` to the absolute path of that same file on the Docker host. The agent-visible path and host path can differ when the agent runs in a container. The agent checks its local file before processing jobs and mounts the host file read-only at `/run/widefleet/storage-credential` in app runtimes. The file is not copied into an artifact or Docker image. Credential refresh must preserve the mounted file's inode; replacing the host file atomically requires recreating the affected containers. Container recreation for credential rotation is an operator procedure, not automated here.
 
-Without a credential file, managed/VM identity endpoints must be reachable from both the agent and app containers. Cloud network and IAM configuration remain operator responsibilities. This does not change the MVP's trust model: app creators are trusted, and fleet credentials are not provisioned separately per app.
+Without a credential file, managed/VM identity endpoints must be reachable from both the agent and fleet runtime containers. Cloud network and IAM configuration remain operator responsibilities. App-scoped bindings separate resource access while celld uses shared fleet credentials.
 
 ## Initialization and existing data
 

@@ -24,7 +24,7 @@ The fleet's identity and data outlive an agent registration. Replacing an agent 
 
 App SSO also preserves validated configuration for restart without management. Changes to identity setup must retain this separation; the [SSO restart tests](../apps/control-plane/tests/installation/sso-supervisor.test.ts) exercise it.
 
-The reference installation uses one managed node and shared storage credentials. It assumes trusted internal app creators; app-scoped bindings do not make it an infrastructure isolation boundary for hostile tenants. Multiple managed nodes and automatic load balancing are not implemented.
+Apps run in separate V8 isolates with app-scoped resource bindings. The reference installation uses one managed node and shared storage credentials. Multiple managed nodes and automatic load balancing are not implemented.
 
 ## Shared authorization, separate identities
 
@@ -48,6 +48,6 @@ App snapshots are immutable so in-flight requests can finish against the version
 
 Previews have independent app resources within the same fleet. Long-running Workflows can retain older code and its resource bindings after a newer app version is published; retaining those bindings must not revive old event subscriptions. See [snapshot preparation](../crates/platform-agent/src/fleet.rs) and the [Workflow adapter tests](../apps/control-plane/tests/runtime/workflow-adapter.test.ts).
 
-Backend network enforcement lives in the trusted loader outside app code, while browser restrictions depend on response CSP. Neither replaces the other. See [backend egress](../packages/app-runtime/src/egress.ts), [browser policy](../packages/app-runtime/src/csp.ts) and the public [network guide](https://widefleet.com/docs/guides/network).
+Backend network enforcement lives in the trusted loader outside app code, while browser restrictions depend on response CSP. See [backend egress](../packages/app-runtime/src/egress.ts), [browser policy](../packages/app-runtime/src/csp.ts) and the public [network guide](https://widefleet.com/docs/guides/network).
 
-The JavaScript runtime is versioned separately from the agent, but its package protocol and celld version must match the agent's supported contract. Independent runtime publication is not permission to change that contract without an agent release. Before upgrading celld, review the [native runtime pitfalls](runtime-implementation.md).
+The JavaScript runtime is versioned separately from the agent, but its package protocol and celld version must match the agent's supported contract. Contract changes require a matching agent release. Before upgrading celld, review the [native runtime pitfalls](runtime-implementation.md).

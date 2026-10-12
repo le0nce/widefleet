@@ -37,7 +37,7 @@ widefleet connector list
 widefleet connector show erp
 ```
 
-The CLI bundles TypeScript/JavaScript and installed dependencies, discovers exported entrypoints, uploads the artifact and waits for activation. There is no required package version bump or release-file handling. `--config PATH` selects another Wrangler file; `--no-wait` returns after queuing. Build progress uses stderr; `--json` or redirected stdout returns structured results. Run any project-specific code generation before deployment.
+The CLI bundles TypeScript/JavaScript and installed dependencies, discovers exported entrypoints, uploads the artifact and waits for activation. `--config PATH` selects another Wrangler file; `--no-wait` returns after queuing. Build progress uses stderr; `--json` or redirected stdout returns structured results. Run any project-specific code generation before deployment.
 
 Each artifact is immutable and identified by its content checksum. PostgreSQL stores references and deployment status; Object Storage stores code and configuration. Repeating an unchanged successful or pending deployment reuses it; repeating a failed deployment retries. To restore previous code, deploy the previous source checkout. This does not reverse data changes. A newer concurrent deployment is reported explicitly if it supersedes a waiting command.
 
@@ -81,11 +81,11 @@ Changes activate the connector's currently desired code and a fixed snapshot of 
 
 ### Storage and recovery
 
-The control plane encrypts values using the installation encryption key and stores the ciphertexts directly in the connector activation snapshots in PostgreSQL. Desired, applied and queued job snapshots own their secret values independently of login settings and credential cleanup. Source artifacts contain no managed secret values. Only the agent holding the active job lease receives decrypted values. Restore PostgreSQL together with the same installation key. Historical snapshots retain ciphertext copies for recovery; this trades additional database storage for self-contained deployment state and avoids a database lookup per secret.
+The control plane encrypts values using the installation encryption key and stores the ciphertexts directly in the connector activation snapshots in PostgreSQL. Desired, applied and queued job snapshots own their secret values independently of login settings and credential cleanup. Source artifacts contain no managed secret values. Only the agent holding the active job lease receives decrypted values. Restore PostgreSQL together with the same installation key. Historical snapshots retain ciphertext copies for recovery.
 
-The initial backend injects plaintext variables into each secret Worker's private fleet configuration. Values can therefore exist in agent staging files, activation journals, fleet object storage manifests and backups. Fleet/storage administrators and trusted connector code can read them. Deleting or rotating a secret changes the serving configuration; it does not erase historical copies. Protect and back up the data plane accordingly. This backend keeps serving during control-plane outages.
+The backend keeps secrets available during control-plane outages by storing plaintext variables in each secret Worker's private fleet configuration. Values can also exist in agent staging files, activation journals, fleet object storage manifests and backups. Fleet/storage administrators and trusted connector code can read them. Deleting or rotating a secret updates the serving configuration; historical copies remain. Protect and back up the data plane accordingly.
 
-Upgrade the control plane, CLI and agent together before using this feature. No database migration or new app-runtime release is required. A future optional Azure Key Vault backend with Managed Identity can keep the same asynchronous getter; it is not implemented here. Such a migration must account for historical plaintext copies and credential rotation, and must not silently fall back to this backend.
+Upgrade the control plane, CLI and agent together before using connector secrets.
 
 ## Give an app its binding
 
@@ -104,7 +104,7 @@ These commands resolve the existing app from `wrangler.jsonc` or `--app NAME`. T
 const customers = await env.ERP.listCustomers();
 ```
 
-There is no `connect()`, generic `invoke()` or translation into HTTP. The binding grants the selected entrypoint's native RPC surface. To expose a narrower API, the connector author exports a separate `WorkerEntrypoint` class and IT selects it with `--entrypoint CustomerReader`. Widefleet does not maintain lists of business methods. The IT project supplies the corresponding TypeScript interface or type package to app projects; automatic type distribution is not provided.
+The binding grants the selected entrypoint's native RPC surface. To expose a narrower API, the connector author exports a separate `WorkerEntrypoint` class and IT selects it with `--entrypoint CustomerReader`. The IT project supplies the corresponding TypeScript interface or type package to app projects.
 
 Bindings default to the connector's `default` export. celld 0.6.1 requires a default Worker export even when callers select a named entrypoint. Export a `WorkerEntrypoint` class as default, or supply a default fetch handler alongside named entrypoints. Exported Durable Object classes are excluded from the CLI's entrypoint list.
 
@@ -116,13 +116,13 @@ Connector configuration supports `vars`, D1, R2, KV and local Durable Object bin
 
 An optional Wrangler `database_id` is accepted for D1; Widefleet assigns its fleet-local storage identity from the connector and database names. Binding-name conflicts are checked against active apps and queued/running app deployments. DO class names remain reserved while either the desired or applied connector package declares them, including after a failed update.
 
-The IT project can implement state in a normal `DurableObject`, declare it in `durable_objects.bindings`, and register its class in `migrations`. Keeping the connector and class names stable preserves that namespace across deployments. Shared state requires deliberately addressing the same object, such as `env.STATE.getByName("erp-connection")`. celld currently requires DO class names to be unique across the fleet; namespace/class renames are not a supported data migration. Automatic facets are not introduced.
+The IT project can implement state in a normal `DurableObject`, declare it in `durable_objects.bindings`, and register its class in `migrations`. Keeping the connector and class names stable preserves that namespace across deployments. Shared state requires deliberately addressing the same object, such as `env.STATE.getByName("erp-connection")`. celld requires DO class names to be unique across the fleet; namespace/class renames are not a supported data migration.
 
 Connector updates use a celld reload and affect every app bound to that connector. The existing activation journal and recovery path preserve the previous serving generation on failure. Before changing installed entrypoints, both desired app grants and actual serving snapshots are checked: a failed revocation cannot authorize removing a still-used entrypoint. Already-running requests can finish under their previous bindings.
 
 Installed code, configuration, bindings and state remain in the data plane. Serving apps and ordinary runtime restarts work without the control plane or deployment agent. App deletion removes that app's references, not a shared connector or its data.
 
-Use matching CLI, control-plane and agent releases. Connector support is included in `0.3.0`. Upgrades from pre-connector development snapshots require a fresh fleet: migration `0009` rejects existing apps, selected runtimes or running jobs before adding the connector schema. It does not migrate those earlier loaders or snapshots. Runtime versions remain immutable; published runtime releases must use a new version for changed bytes.
+Use matching CLI, control-plane and agent releases. Connector support is included in `0.3.0`. Upgrades from pre-connector development snapshots require a fresh fleet: migration `0009` rejects existing apps, selected runtimes or running jobs before adding the connector schema. Runtime versions remain immutable; published runtime releases must use a new version for changed bytes.
 
 `vars` are ordinary package configuration; use the dedicated secret commands for credentials. Connector cron/queue configuration, cross-fleet bindings and connector removal commands are not implemented here. Runtime updates preserve installed connectors. Native RPC/DO/telemetry differences are described in the [celld compatibility notes](/reference/runtime-compatibility).
 

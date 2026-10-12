@@ -3,9 +3,8 @@ title: Configuration
 description: App configuration fields, storage bindings and settings managed by the platform.
 ---
 
-App projects use `wrangler.jsonc`. The CLI accepts a defined subset of Wrangler
-configuration and rejects unknown fields. Use the generated starter as the baseline;
-a configuration accepted by Cloudflare is not automatically supported by Widefleet.
+App projects use `wrangler.jsonc`. Start with the generated starter and use the
+supported fields below. The CLI validates the configuration and rejects unknown fields.
 
 ## Minimal app configuration
 
@@ -29,8 +28,8 @@ for app code that does not use storage.
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`                                | App identifier within the selected installation. Use 1–48 lowercase letters, digits or hyphens, starting with a letter and ending with a letter or digit. `auth` is reserved. |
 | `main`                                | Built Worker entry module, relative to the configuration file.                                                                                                                |
-| `compatibility_date`                  | Worker compatibility date; does not enable every Cloudflare API.                                                                                                              |
-| `compatibility_flags`                 | Supported flags are `nodejs_compat` and `nodejs_als`. Node.js compatibility remains partial.                                                                                  |
+| `compatibility_date`                  | Worker compatibility date; see [runtime compatibility](/reference/runtime-compatibility) for supported APIs.                                                                  |
+| `compatibility_flags`                 | Supported flags are `nodejs_compat` and `nodejs_als`; see [Node.js compatibility](/reference/runtime-compatibility#nodejs-compatibility).                                     |
 | `assets.directory` / `assets.binding` | Built static asset directory and the binding exposed to app code.                                                                                                             |
 | `vars`                                | Plain-text string values. Never put credentials here.                                                                                                                         |
 
@@ -50,20 +49,20 @@ platform URL to select the installation; see [CLI configuration](/reference/cli-
 | `workflows`                             | Named Workflow classes with `binding`, `name` and `class_name`; requires CLI and platform `0.3.0` or newer and a runtime advertising Workflow support. |
 
 Resources are scoped to each app or preview. Keep resource identifiers stable to
-preserve access to existing data. Removing a declaration does not migrate or erase
-its native data. The SvelteKit HTTP adapter does not generate Cron, Queue or Workflow
-handlers; a custom entry module must export them.
+preserve access to existing data. Native data remains after a declaration is removed.
+For Cron, Queue or Workflow handlers, export them from a custom entry module
+alongside the generated SvelteKit HTTP handler.
 
 ## Database migrations
 
-`widefleet deploy` does not apply SQL migrations. CLI and platform
-provide explicit migration commands. Follow [database migrations](/guides/migrations)
+Apply SQL migrations separately from deployment using the CLI's migration commands.
+Follow [database migrations](/guides/migrations)
 for file configuration, Drizzle, first-schema deployment and failure recovery.
 
 ## Settings outside this file
 
-Company SSO, app access groups, network grants and connector bindings are managed
-by the platform. They are not Wrangler fields. Use the management UI or the relevant
-[CLI commands](/reference/cli); code rollback does not revert access or network rules.
+Manage company SSO, app access groups, network grants and connector bindings through
+the management UI or the relevant [CLI commands](/reference/cli). These settings
+remain in effect across code deployments and rollbacks.
 
 After changing app configuration, [publish a preview and verify it](/guides/deployments).

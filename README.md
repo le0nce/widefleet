@@ -84,7 +84,7 @@ Management stores configuration and deployment jobs. The agent installs built co
 
 The reference installation runs on one Linux x86-64 Docker host. You operate identity configuration, DNS, certificates, backups and upgrades. Follow the [installation guide](https://widefleet.com/docs/self-hosting/installation); use [external services](https://widefleet.com/docs/self-hosting/external-services) for external PostgreSQL, cloud storage and automatic HTTPS.
 
-This README describes the current source branch. Published releases can lag behind it; use matching CLI, management and agent builds and check each guide's version requirements. See [releases](https://github.com/widefleet/widefleet/releases) and [runtime updates](https://widefleet.com/docs/reference/runtime#versions-and-updates).
+This README describes the current source branch. For an installation, select matching CLI, management and agent releases using each guide's version requirements. See [releases](https://github.com/widefleet/widefleet/releases) and [runtime updates](https://widefleet.com/docs/reference/runtime#versions-and-updates).
 
 ## Documentation
 

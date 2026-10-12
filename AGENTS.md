@@ -36,6 +36,7 @@ Most code changes do not need an internal documentation change. Read the relevan
 - Separate tutorials, task guides, explanations and reference; link related pages.
 - Start with the goal and prerequisites; end with an observable result and a clear next step.
 - Use plain language and small, complete, runnable examples. Verify examples against the documented version.
+- Lead with supported capabilities and useful actions. Explain relevant limitations in context and avoid repetitive caveats.
 - Cover common failures and recovery. Keep navigation predictable and advanced details easy to find.
 
 ## Documentation pull requests and releases

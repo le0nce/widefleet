@@ -3,11 +3,11 @@ title: Application runtime
 description: Runtime versions, activation, recovery, storage and supported app APIs.
 ---
 
-One default celld fleet runs the installation's apps and previews as separate Dynamic Workers. The current installer manages one node. Fleet identity is stored in PostgreSQL and remains unchanged when an executor is registered, disabled or replaced. The executor needs access to the same Docker host, persistent node state, routing directory and fleet storage; registering a new token does not create a new fleet or copy data to another host.
+One default celld fleet runs the installation's apps and previews as separate Dynamic Workers. The installer manages one node. Fleet identity is stored in PostgreSQL and remains unchanged when an executor is registered, disabled or replaced. A replacement executor reuses the same Docker host, persistent node state, routing directory and fleet storage.
 
 ## Versions and updates
 
-The Widefleet loader and built-in binding adapters are JavaScript built from `packages/app-runtime`. They are versioned separately from the Rust agent. `widefleet runtime update VERSION` downloads the matching `runtime-vVERSION` GitHub release and verifies its published checksum. The CLI uploads the package through the authenticated API; operators do not handle release files manually. If the release repository requires authentication, supply a repository-read token using `GH_TOKEN` or `GITHUB_TOKEN`. That token is used only for GitHub; the Widefleet credential is used only for the management API.
+The Widefleet loader and built-in binding adapters are JavaScript built from `packages/app-runtime`. They are versioned separately from the Rust agent. `widefleet runtime update VERSION` downloads the matching `runtime-vVERSION` GitHub release, verifies its published checksum and uploads the package through the authenticated API. If the release repository requires authentication, supply a repository-read token using `GH_TOKEN` or `GITHUB_TOKEN`. That token is used only for GitHub; the Widefleet credential is used only for the management API.
 
 ```sh
 widefleet login
@@ -24,7 +24,7 @@ If an update returns `409: Runtime versions are immutable`, the installation alr
 
 Platform 0.3.2 bundles app runtime 0.2.2, using installation protocol 1 for celld 0.6.2. The control plane and agent require that celld version in runtime packages. Workflow support additionally requires a deployment agent that provisions Workflow protocol 1 bindings. A compatible loader/adapter update within installed capabilities needs no Rust rebuild; a new installation protocol or celld binary requires a separately reviewed platform update.
 
-Runtime 0.2.1 forwards incoming HTTP request cancellation explicitly to the loaded app. If the client disconnects before response headers, the app's `request.signal` is aborted. App code must pass that signal to any downstream requests it wants to cancel, for example `env.SERVICE.fetch(url, { signal: request.signal })`. A timeout after a fetch has returned still needs explicit cancellation of the response body; forwarding the incoming signal does not change that celld behavior.
+Runtime 0.2.1 forwards incoming HTTP request cancellation explicitly to the loaded app. If the client disconnects before response headers, the app's `request.signal` is aborted. App code must pass that signal to any downstream requests it wants to cancel, for example `env.SERVICE.fetch(url, { signal: request.signal })`. A timeout after a fetch has returned still needs explicit cancellation of the response body.
 
 ## Activation and recovery
 
@@ -40,20 +40,20 @@ Cron schedule and queue attachment changes use two native phases: validate new r
 
 The [celld/Cloudflare comparison](/reference/runtime-compatibility) separates native differences from Widefleet implementation choices.
 
-| Facility         | Behavior                                                                                                                                                                                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1               | Prepared statements, batch transactions, raw rows and sessions are forwarded. `dump()` is unsupported by celld 0.6.1.                                                                                                                                                                   |
-| R2               | Bodies, metadata, conditions, ranges and multipart uploads are supported. Customer-provided encryption keys are unsupported.                                                                                                                                                            |
-| KV               | Text, JSON, bytes, metadata, bulk reads and listing are supported. Streams use the native HTTP service-binding transport because celld 0.6.1 cannot clone streams through custom RPC; celld still buffers values internally.                                                            |
-| Cron / Queues    | Declared schedules and consumers call the app's `scheduled`/`queue` handlers, including `waitUntil`, acknowledgment and retry decisions.                                                                                                                                                |
-| Telemetry        | App HTTP tails provide console logs and exceptions. celld's Dynamic Worker tails do not cover RPC, Cron or Queue executions; native distributed traces are not exported through this app channel. See [telemetry](/self-hosting/runtime-logs).                                          |
-| Dynamic capacity | celld 0.6.1 has a native limit of 256 loaded dynamic instances per process, with at most 255 from one loader generation. Unreferenced instances are eligible for collection; this is not a limit of 256 registered apps. There is no additional platform cache-size or concurrency cap. |
-| Scaling          | One managed node initially; no automatic node provisioning or load balancing. A node failure affects all apps on it.                                                                                                                                                                    |
+| Facility         | Behavior                                                                                                                                                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1               | Prepared statements, batch transactions, raw rows and sessions are forwarded. `dump()` is unsupported by celld 0.6.1.                                                                                                                          |
+| R2               | Bodies, metadata, conditions, ranges and multipart uploads are supported. Customer-provided encryption keys are unsupported.                                                                                                                   |
+| KV               | Text, JSON, bytes, metadata, bulk reads and listing are supported. Streams use the native HTTP service-binding transport because celld 0.6.1 cannot clone streams through custom RPC; celld still buffers values internally.                   |
+| Cron / Queues    | Declared schedules and consumers call the app's `scheduled`/`queue` handlers, including `waitUntil`, acknowledgment and retry decisions.                                                                                                       |
+| Telemetry        | App HTTP tails provide console logs and exceptions. celld's Dynamic Worker tails do not cover RPC, Cron or Queue executions; native distributed traces are not exported through this app channel. See [telemetry](/self-hosting/runtime-logs). |
+| Dynamic capacity | celld 0.6.1 has a native limit of 256 loaded dynamic instances per process, with at most 255 from one loader generation. The limit counts loaded instances; unreferenced instances are eligible for collection.                                |
+| Scaling          | One managed node initially; no automatic node provisioning or load balancing. A node failure affects all apps on it.                                                                                                                           |
 
 [App Workflows](/guides/workflows) require a compatible agent and runtime with Workflow support. Native Durable Object namespaces inside dynamic apps are not part of this app contract. [IT connectors](/guides/connectors) run as independent regular Workers and can declare their own Durable Object classes. The trusted loader enforces [backend network permissions and browser CSP](/guides/network).
 
 ## App removal
 
-Deletion queues cleanup for the app and all its previews. Each cleanup removes the route, app references, deployment artifacts, snapshots and safely removable R2 objects; unrelated apps and the shared fleet remain running. Native D1/KV/Queue cells may remain without app references because celld 0.6.1 exposes no supported per-app physical purge. Do not delete files owned by a running native cell. Provider snapshots/version history and telemetry retention have their own lifecycle. A complete supported cell-purge path remains unresolved.
+Deletion queues cleanup for the app and all its previews. Each cleanup removes the route, app references, deployment artifacts, snapshots and safely removable R2 objects; unrelated apps and the shared fleet remain running. Native D1/KV/Queue cells may remain without app references because celld 0.6.1 exposes no supported per-app physical purge. Do not delete files owned by a running native cell. Provider snapshots/version history and telemetry retention have their own lifecycle.
 
-The shared-fleet migration intentionally does not convert existing per-app deployments. It stops if the database still contains apps. Use a fresh development installation for this foundation; there is no automatic data migration or downgrade.
+Upgrading from the earlier per-app runtime requires a fresh installation. The shared-fleet migrations reject existing apps; network migration `0008` also rejects selected runtimes and running jobs. There is no automatic data migration or downgrade.

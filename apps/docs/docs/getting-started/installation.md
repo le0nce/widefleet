@@ -100,7 +100,7 @@ widefleet logs --level error
 ```
 
 Runtime logs require telemetry services enabled by the operator; the local demo
-includes them. A failed log query is not evidence that the app has no errors.
+includes them.
 
 ## If setup fails
 

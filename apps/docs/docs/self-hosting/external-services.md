@@ -3,9 +3,9 @@ title: External services and HTTPS
 description: Configure external PostgreSQL, object storage and automatic HTTPS.
 ---
 
-These are maintained installation configurations, shared with the local PostgreSQL/RustFS reference installation. They do not provision VMs, cloud databases, object stores, IAM or permanent DNS records. Bicep/Terraform deployment templates are not included. Use Linux x86-64, the supported Docker baseline from [operations](/self-hosting/installation), and Docker Compose 2.20.0 or newer.
+Connect Widefleet to existing cloud services using the same maintained Compose configuration as the local PostgreSQL/RustFS installation. Provision the host, cloud databases, object stores, IAM and permanent DNS records before following this guide. Use Linux x86-64, the supported Docker baseline from [operations](/self-hosting/installation), and Docker Compose 2.20.0 or newer.
 
-Use release `v0.1.8` or newer with its matching source checkout and image manifest. The `v0.1.7` images predate native Azure/GCS storage and the new edge configurator; do not use them with these service files. See the [operations guide](/self-hosting/installation#pull-the-release-images) for downloading and verifying the release manifest.
+Use release `v0.1.8` or newer with its matching source checkout and image manifest. See the [operations guide](/self-hosting/installation#pull-the-release-images) for downloading and verifying the release manifest.
 
 ## Select the installation
 
@@ -47,7 +47,7 @@ For runtime error history and `widefleet logs`, add `compose.telemetry.yaml` and
 
 ## External PostgreSQL
 
-Provision a PostgreSQL database and a login that owns that database and can create tables, indexes and the migration schema. Management runs the checked-in migrations and idempotently registers the CLI OAuth client; no cloud-superuser role is required. The reference uses one database owner for initialization and runtime. Separate migration and runtime roles remain a future hardening option.
+Provision a PostgreSQL database and a login that owns that database and can create tables, indexes and the migration schema. Management runs the checked-in migrations and idempotently registers the CLI OAuth client; database-owner permissions are sufficient. The reference uses that owner for both initialization and runtime.
 
 Use verified TLS explicitly:
 
@@ -66,7 +66,7 @@ DATABASE_URL=postgres://widefleet:URL_ENCODED_PASSWORD@database.example.com:5432
 
 Use the certificate's matching DNS name. Cloud SQL connections to an IP address require a server certificate that can be verified for that IP or a supported DNS name and network path. A Cloud SQL connector/proxy is not bundled. Keep server-side TLS enforcement enabled and allow the host network access to the database. Private networking and firewall rules are operator responsibilities.
 
-The external server must support the SQL in our migrations. PostgreSQL 18 is the tested baseline; Azure/GCP versions, extensions, privileges and provider-specific TLS chains require the real-cloud acceptance test. No runtime connection code bypasses TLS validation.
+The external server must support the SQL in our migrations. PostgreSQL 18 is the tested baseline; verify your provider's version, extensions, privileges and TLS chain during installation acceptance.
 
 ## Object storage
 
@@ -145,8 +145,8 @@ Restart Traefik after infrastructure changes to TLS mode or ACME environment. Ke
 
 ## Verification boundary
 
-Run `RUN_INSTALLATION_TESTS=1 pnpm exec vitest run apps/control-plane/tests/installation` to validate the Compose combinations, credential isolation, PostgreSQL TLS rejection cases and repeatable migrations, and certificate loading/restart with the pinned Traefik image. These tests use synthetic credentials, temporary containers and locally generated certificates. The Traefik fixture has no external network and uses a preloaded test ACME certificate; it does not prove real certificate issuance or renewal.
+Run `RUN_INSTALLATION_TESTS=1 pnpm exec vitest run apps/control-plane/tests/installation` to validate the Compose combinations, credential isolation, PostgreSQL TLS rejection cases and repeatable migrations, and certificate loading/restart with the pinned Traefik image. These tests use synthetic credentials, temporary containers and locally generated certificates. The Traefik fixture runs offline with a preloaded test ACME certificate.
 
 Cloud acceptance with release `v0.1.8` and CLI `0.1.5` verified the Azure configuration: private PostgreSQL 18 with `verify-full`, system-assigned VM identity with container-scoped Blob data permissions, management and app Entra login, OAuth device authorization, and a CLI deployment using native Azure artifacts and fleets. D1 notes and R2 images remained readable after a normal app-container restart with its existing data disk; the image bytes matched before and after restart. Cloudflare DNS-01 issuance succeeded against both the staging and production Let's Encrypt CAs, and public HTTPS passed certificate verification.
 
-This acceptance does not establish certificate renewal, recovery after losing the data disk, other Azure credential modes, or real GCS authentication/deployment. Those remain separate acceptance checks. The local `./dev` experience and existing S3 deployment tests remain available without cloud accounts.
+Certificate renewal, recovery after losing the data disk, other Azure credential modes and real GCS authentication/deployment remain separate acceptance checks. The local `./dev` experience and S3 deployment tests run without cloud accounts.

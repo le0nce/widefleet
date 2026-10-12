@@ -3,17 +3,17 @@ title: Single-host installation
 description: Install, configure, upgrade and recover a company installation.
 ---
 
-This Compose deployment is the reference MVP installation. Use Linux x86-64, Docker Engine 29.8.1, Docker Compose 2.20.0 or newer (including v5), and a checkout of the matching release. Published images contain the required runtime and setup tools; the operator host needs no Node, pnpm or Rust installation. The operator owns DNS, certificates, identity-provider registrations, backups and upgrades. Commands below change the selected installation; choose its environment file deliberately.
+This Compose deployment is the reference installation. Use Linux x86-64, Docker Engine 29.8.1, Docker Compose 2.20.0 or newer (including v5), and a checkout of the matching release. Published images contain the required runtime and setup tools; the operator host needs no Node, pnpm or Rust installation. The operator owns DNS, certificates, identity-provider registrations, backups and upgrades. Commands below change the selected installation; choose its environment file deliberately.
 
-This page describes local PostgreSQL, RustFS and operator-provided certificates. [External services and automatic HTTPS](/self-hosting/external-services) use the same maintained base configuration with selectable service files. The `./dev` quickstart remains separate and unchanged.
+This page describes local PostgreSQL, RustFS and operator-provided certificates. [External services and automatic HTTPS](/self-hosting/external-services) use the same maintained base configuration with selectable service files.
 
-Docker 29.8.1 is the tested host baseline, pinned in CI as well. The GitHub runner's preinstalled Docker 28.0.4 rejected fixed app addresses on automatically allocated subnets; older engines are not a supported deployment target. Docker documents the restored behavior in its [29.x release notes](https://docs.docker.com/engine/release-notes/29/#2904).
+Docker 29.8.1 is the tested host baseline, pinned in CI. Its network address allocation supports the fleet's fixed app addresses; see the [29.x release notes](https://docs.docker.com/engine/release-notes/29/#2904).
 
 ## Infrastructure and first start
 
 Copy `infra/deployment.env.example` to a private file outside version control. Set the database/storage credentials, `PLATFORM_URL`, `APP_DOMAIN` and the absolute `PLATFORM_DATA_DIRECTORY`. The management hostname must be outside the app domain, for example `platform.example.test` and `*.apps.example.test`. Configure DNS and provide `${PLATFORM_DATA_DIRECTORY}/tls/fullchain.pem` and `privkey.pem`, or select [automatic HTTPS](/self-hosting/external-services#automatic-https-with-cloudflare).
 
-Company SSO, directory credentials and browser editability are stored in PostgreSQL and configured in **Settings**. They are not container environment variables. Widefleet generates its authentication, app-cookie and encryption keys in the persistent `platform-state` volume. Do not regenerate that volume during deployment.
+Configure company SSO, directory credentials and browser editability in **Settings**; these are stored in PostgreSQL. Widefleet generates its authentication, app-cookie and encryption keys in the persistent `platform-state` volume. Preserve that volume across deployments.
 
 **Keep first setup accessible only to the installing administrator**, or supply the [bootstrap file](#automated-first-setup) before exposing the installation. The first person who completes the setup form becomes Owner; there is no initial shared password or setup key. Once claimed, this endpoint cannot create another administrator.
 
@@ -88,11 +88,11 @@ widefleet settings external-management true
 widefleet settings external-management false
 ```
 
-The CLI and external integrations use `GET/PUT /api/v1/settings`, `POST /api/v1/settings/plan` and `PUT /api/v1/settings/external-management`. The UI uses SvelteKit remote functions that call the same settings service. Administrator permission is required through either entry point. Exports contain secret references, never stored secret values; those references belong to this installation. A future Terraform provider can use this API.
+The CLI and external integrations use `GET/PUT /api/v1/settings`, `POST /api/v1/settings/plan` and `PUT /api/v1/settings/external-management`. The UI uses SvelteKit remote functions that call the same settings service. Administrator permission is required through either entry point. Exports contain secret references, never stored secret values; those references belong to this installation.
 
-External management makes the settings UI read-only; API/CLI writes and app management remain available. An administrator can explicitly turn browser editing back on. This is a configuration workflow switch, not an additional permission role.
+External management makes the settings UI read-only; API/CLI writes and app management remain available. An administrator can turn browser editing back on.
 
-Settings are validated before saving. Changes to proxy options require acknowledgement of a restart; protected app requests can briefly fail, including for signed-in users. The UI presents **Save and restart** only for those changes. Client-secret replacement uses OAuth2 Proxy's secret-file support without restarting it. Activation status distinguishes saved settings from the configuration running in the proxy. A running service is not proof of a successful IdP login.
+Settings are validated before saving. Changes to proxy options require acknowledgement of a restart; protected app requests can briefly fail, including for signed-in users. The UI presents **Save and restart** only for those changes. Client-secret replacement uses OAuth2 Proxy's secret-file support without restarting it. Activation status distinguishes saved settings from the configuration running in the proxy. Verify a company sign-in after changing identity settings.
 
 The SSO image contains the pinned, unmodified OAuth2 Proxy binary and a small process supervisor. It validates candidate configuration and retains only the current active snapshot for restart/recovery. Its shared `app-auth` volume contains the runtime credentials needed to authenticate users and restart without management or PostgreSQL. Treat that volume as secret material. There is no configuration-version history.
 
@@ -100,7 +100,7 @@ The SSO image contains the pinned, unmodified OAuth2 Proxy binary and a small pr
 
 Entered provider secrets are encrypted in PostgreSQL. `PLATFORM_ENCRYPTION_KEY` or `PLATFORM_ENCRYPTION_KEY_FILE` can supply an operator-managed key; otherwise Widefleet creates `encryption.key` in `platform-state`. Use one source. The database and the same key are both required for restoration.
 
-Enter and replace provider secrets through Settings or the settings API/CLI. The one-time bootstrap accepts initial values too. Saving applies the change without periodic polling by the control plane. External Key Vault/Secrets Manager integrations can extend the secret-reference resolver in the future; they are not included.
+Enter and replace provider secrets through Settings or the settings API/CLI. The one-time bootstrap accepts initial values too. Saving applies the change directly.
 
 If company SSO is broken, run on the selected installation's host:
 
@@ -112,7 +112,7 @@ The command requires an existing Owner or Admin and prints a one-use link. It op
 
 ### App group claims
 
-**Enable group claims on the app-SSO registration before using group-based permissions in apps.** Successful SSO does not imply that Entra sends group memberships. Widefleet forwards verified group claims but does not enable them in Entra. A registration with `groupMembershipClaims: null` does not request them.
+**Enable group claims on the app-SSO registration before using group-based permissions in apps.** Widefleet forwards the group claims configured in Entra. Follow these steps to include them in app sign-ins:
 
 1. In the Microsoft Entra admin center, open **App registrations** and select the registration selected for **Published app sign-in**, not the management registration.
 2. Open **Token configuration → Add groups claim** and select the group types the apps need. For security-group permissions, select **Security groups** (`groupMembershipClaims: "SecurityGroup"`).
@@ -129,7 +129,7 @@ For large directories, **Groups assigned to the application** can restrict the e
 
 Choose **OpenID Connect** in Settings, enter the issuer URL and a login-button label, then register the displayed management and app callback URLs. Management requests `openid profile email` and verifies ID tokens. Provider or client changes can produce different user subjects; link the replacement company account deliberately before retiring the former login.
 
-For apps, configure the IdP to include memberships in the ID token. The optional token fields select group, name and email claims; defaults are `groups`, `name` and `email`. The verified user identifier is `sub`. Some providers use different subjects for different clients, so management and app user IDs need not match. Generic OIDC forwards supplied groups; it does not fetch a provider directory. Google Workspace group lookup and SCIM provisioning are not included. Each app implements its own authorization.
+For apps, configure the IdP to include memberships in the ID token. The optional token fields select group, name and email claims; defaults are `groups`, `name` and `email`. The verified user identifier is `sub`. Some providers use different subjects for different clients, so management and app user IDs can differ. Generic OIDC uses the groups supplied in the token. Each app implements its own authorization.
 
 ### Optional group search
 
@@ -191,11 +191,11 @@ Sign in to management, register an agent, and copy its one-time token into `PLAT
 docker compose --env-file widefleet-images-VERSION.env --env-file /absolute/path/deployment.env -f infra/compose.yaml --profile agent up -d agent
 ```
 
-App creators use the installation's default fleet. Agent registration authorizes an executor for that fleet; it does not determine app or storage identity. Use the same Docker host, node-state directory, routing directory and storage configuration when replacing an executor. A replacement can claim pending or expired jobs without changing apps. The current installer manages one node; registering another executor is not a way to create an additional fleet or scale out.
+App creators use the installation's default fleet. Agent registration authorizes an executor for that fleet while preserving app and storage identities. Use the same Docker host, node-state directory, routing directory and storage configuration when replacing an executor. A replacement can claim pending or expired jobs without changing apps. The installer manages one runtime node.
 
-Only ports 80 and 443 are published. PostgreSQL, object storage and runtime operator APIs have no host ports. The agent's Docker socket grants host-level control and is available only to the agent. Apps run as separate Dynamic Workers in one shared fleet container and Docker network. The trusted proxy and storage container join that network.
+Only ports 80 and 443 are published. PostgreSQL, object storage and runtime operator APIs have no host ports. The agent's Docker socket grants host-level control and is available only to the agent. Apps run in separate V8 isolates with app-scoped resource bindings inside a shared fleet container and Docker network. The trusted proxy and storage container join that network.
 
-The reference storage configuration uses installation-wide operator credentials. They are passed to celld, not Worker bindings. Separate S3 credentials scoped to each fleet are not provisioned by this MVP. This setup is for trusted company app creators, not hostile multi-tenant execution. The runtime has a read-only root filesystem and a persistent writable node-state directory. No additional platform CPU, memory or request-concurrency limits are imposed.
+The reference installation is designed for trusted company app creators. Its installation-wide storage credentials are passed to celld, not to app Worker bindings. The runtime has a read-only root filesystem and a persistent writable node-state directory. No additional platform CPU, memory or request-concurrency limits are imposed.
 
 ## Upgrade deliberately
 
@@ -248,7 +248,7 @@ After the first verified management sign-in, the person appears under **Members*
 
 On an app's **Access** tab, **Management access** lets you search members by name or email and grant or revoke app collaboration. A collaborator can deploy, roll back and delete that app; only its owner or an organization administrator can change its grants. Organization administrators retain access independently of individual grants. The CLI's existing `grant` and `revoke` commands remain compatible.
 
-The first administrator is created by setup or the bootstrap file. Subsequent company sign-ins create Members. Startup never promotes users or overwrites role changes. Organization lifecycle and invitations are not exposed. These management roles do not determine who can use a published app.
+The first administrator is created by setup or the bootstrap file. Subsequent company sign-ins create Members. Role changes persist across restarts. Published apps have separate [access rules](/reference/app-access).
 
 ## App access
 
@@ -258,7 +258,7 @@ The CLI offers the same operations as JSON: `widefleet catalog list`, `widefleet
 
 Traefik clears client-supplied identity headers, checks SSO through OAuth2 Proxy, copies only the verified identity, then removes `Cookie`, `Authorization` and token headers before forwarding to an app. App responses cannot set cookies. The SvelteKit starter populates `locals.user` from the verified identity through its included server identity helper.
 
-App-side cookie sessions and frameworks requiring server cookies are unsupported in this MVP. The management login has its own host-only cookies and is unaffected. App SSO uses a one-hour encrypted cookie with no stored OAuth tokens and no refresh token; after expiry, the browser returns through the identity provider. Disabling a user there does not invalidate an already-issued app cookie immediately. `/oauth2/*` and the `auth` app hostname are reserved for the proxy.
+App-side cookie sessions and frameworks requiring server cookies are unsupported. The management login has its own host-only cookies. App SSO uses a one-hour encrypted cookie with no stored OAuth tokens and no refresh token; after expiry, the browser returns through the identity provider. Disabling a user there does not invalidate an already-issued app cookie immediately. `/oauth2/*` and the `auth` app hostname are reserved for the proxy.
 
 ## Logs and recovery
 
@@ -281,4 +281,4 @@ To restore on the existing host, stop the same services, restore the complete ma
 
 On a replacement host, restore the same absolute data path and ownership, install the pinned images, and start PostgreSQL, storage and management. During recovery, restrict the proxy to the restore operator so the CLI can reach its configured HTTPS management origin while app users remain excluded. Restore the agent credential. Queue the recorded successful artifact for every restored app with `widefleet rollback <app-id> <artifact-id> --no-wait`; start the agent to restore the shared runtime and app routes. This republishes code while retaining the restored fleet data. Enable general access only after verifying identities, a database record and the corresponding private file. Never run old and restored fleet nodes against the same bucket simultaneously.
 
-A full disaster-recovery drill with the operator's actual storage and backup target remains a deployment prerequisite. Local automated tests currently verify code rollback, preserved D1/R2 data, cold restart without management, executor replacement and app-scoped removal; those checks do not by themselves prove a complete installation backup.
+Before relying on the backup, complete a restore drill using the installation's actual storage and backup target.

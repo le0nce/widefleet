@@ -23,13 +23,13 @@ Explicit names contain 1–48 lowercase letters, digits or internal hyphens. Git
 
 Each preview has a stable app ID and an internal slug based on the parent slug and preview name. Long slugs are shortened with a hash suffix to fit the existing 48-character limit. This does not shorten the preview hostname's two separate labels. Deploying the same name again preserves its data and deployment history.
 
-Previews automatically inherit the original app’s centrally managed access groups. No preview-specific setup is needed or supported; later changes apply to existing previews too. Set the original app's rule with `widefleet access set --group GROUP_ID`. See [app access](/reference/app-access).
+Manage access groups on the original app with `widefleet access set --group GROUP_ID`. Its previews inherit the rule and all later changes automatically. See [app access](/reference/app-access).
 
-Previews have their own D1, R2, KV and Queue resources. Parent data, network permissions and connector grants are not copied. Plain-text variables and resource declarations come from the project configuration being deployed. Configure network permissions and connector bindings for the preview's own app ID when needed.
+Previews start with their own empty D1, R2, KV and Queue resources. Plain-text variables and resource declarations come from the project configuration being deployed. Configure network permissions and connector bindings separately for the preview's own app ID when needed.
 
 ## Flags and cleanup
 
-`--config PATH`, `--skip-build`, `--no-wait` and `--json` have the same meaning as with `widefleet deploy`. JSON output includes the preview's `appId`, deployment status and URL. Build and progress logs go to stderr. With `--no-wait`, the returned status is queued and does not confirm activation.
+`--config PATH`, `--skip-build`, `--no-wait` and `--json` have the same meaning as with `widefleet deploy`. JSON output includes the preview's `appId`, deployment status and URL. Build and progress logs go to stderr. With `--no-wait`, the result reports the queued deployment; activation follows asynchronously.
 
 ```sh
 widefleet preview --name review --json
@@ -50,5 +50,3 @@ The existing `*.apps.example.com` DNS wildcard can resolve deeper preview names 
 When using `TLS_MODE=provided`, supply a certificate covering the preview hostname or its parent wildcard as well as the existing app and management hosts. Automatic certificate issuance is available through the Cloudflare ACME overlay. Follow the [versioned DNS and TLS setup](/self-hosting/external-services#automatic-https-with-cloudflare) and the installation's normal deployment process.
 
 Initial certificate issuance is asynchronous. A successful app deployment confirms runtime activation and route publication; HTTPS may remain unavailable until Traefik has issued the first certificate. Check Traefik logs if issuance fails. Nested previews use the same SSO and credential-stripping middleware as regular apps.
-
-Local verification covers the CLI, API authorization and hostname collisions, generated certificate requests, trusted TLS handshakes with synthetic certificates before and after a proxy restart, and SSO on nested preview hosts. It does not contact a public certificate authority or modify live DNS.

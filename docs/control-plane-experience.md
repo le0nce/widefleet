@@ -10,15 +10,15 @@ App usage rules are inherited by previews. An editor must show that ownership an
 
 ## Show what has actually completed
 
-Saving desired configuration or receiving a job ID does not mean the runtime or proxy has applied it. Show submission, pending execution and confirmed outcomes separately. Keep the last known result when a refresh fails, and preserve operation feedback across app-tab navigation.
+Show submission, pending execution and confirmed outcomes separately. Saving desired configuration or receiving a job ID confirms submission; the runtime or proxy confirms application. Keep the last known result when a refresh fails, and preserve operation feedback across app-tab navigation.
 
-One-time credentials need special handling: a successful registration followed by a failed list refresh must not hide the only copy of the credential or encourage duplicate registration. Refreshing surrounding data must not discard a successful mutation's result.
+Keep newly issued one-time credentials visible even if refreshing the surrounding list fails. Preserve the successful registration result so users can copy the credential without registering again.
 
 The [app-management browser tests](../apps/control-plane/tests/e2e/auth.spec.ts) cover these interactions against server state, including permission changes while a page is open.
 
 ## Preserve progress across authentication
 
-Initial setup crosses local-owner creation, identity configuration, company sign-in and account verification. Preserve progress through redirects and keep temporary password access until the owner has linked and verified a company account. A successful provider configuration save alone is not evidence that the owner can sign in.
+Initial setup crosses local-owner creation, identity configuration, company sign-in and account verification. Preserve progress through redirects and keep temporary password access until the owner has linked and verified a company account using the saved provider configuration.
 
 CLI authorization must let the user compare the device code and understand whether approval or rejection succeeded before returning to the terminal. Keep this flow focused on the request they arrived to verify.
 

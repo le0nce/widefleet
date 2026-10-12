@@ -62,7 +62,7 @@ widefleet migrations list DB
 widefleet migrations apply DB
 ```
 
-Widefleet discovers files such as `drizzle/20261008120000_add_notes/migration.sql`. Snapshot JSON files are ignored, and SQL statement-breakpoint comments remain valid SQL comments. Drizzle is optional. Direct `drizzle-kit migrate` access to Widefleet is not provided.
+Widefleet discovers files such as `drizzle/20261008120000_add_notes/migration.sql`. Snapshot JSON files are ignored, and SQL statement-breakpoint comments remain valid SQL comments. Use `drizzle-kit generate` to create the SQL and `widefleet migrations apply` to run it against Widefleet.
 
 ## Failure and retry behavior
 

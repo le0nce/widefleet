@@ -52,9 +52,9 @@ IDs with `widefleet apps` and deployment IDs and artifact IDs with `widefleet hi
 | `widefleet catalog list`                    | List published app launch URLs.                                      |
 | `widefleet delete APP_UUID --yes`           | Request removal of an app and all its previews.                      |
 
-The target is the selected platform URL plus `name` in `wrangler.jsonc`. The first deploy creates that app; subsequent deploys update it after checking the user's app permissions. A changed name selects a different app. The server assigns the host, and existing apps keep their host and data. No app ID, host selection or local project-link file is needed for normal deployment.
+The target is the selected platform URL plus `name` in `wrangler.jsonc`. The first deploy creates that app; subsequent deploys update it after checking the user's app permissions. A changed name selects a different app. The server assigns the host, and existing apps keep their host and data.
 Logs, access, network and migrations also use project context; history, events and
-rollback require IDs. Check a command's help before assuming it accepts `--app`.
+rollback require IDs. Each command's help lists its selection options.
 
 ## Deployment flags and output
 
@@ -64,12 +64,12 @@ These flags apply to both `deploy` and `preview`:
 | --------------- | ----------------------------------------------------------------------------- |
 | `--config PATH` | Read another Wrangler configuration; project paths are relative to that file. |
 | `--skip-build`  | Upload the existing build instead of running the app build.                   |
-| `--no-wait`     | Return after queueing; does not confirm activation.                           |
+| `--no-wait`     | Return the queued deployment; activation follows asynchronously.              |
 | `--json`        | Print one result on stdout; build output and progress go to stderr.           |
 
-After activation, the command prints `Deployment succeeded` and the app URL. For automation, use `widefleet deploy --json`: stdout contains one JSON object with the final deployment fields and `url`, while build output and progress go to stderr. The `id` field identifies the deployment and `appId` identifies the app. Existing scripts that parsed the default JSON output must add `--json`. With `--no-wait --json`, the result describes the queued deployment and does not confirm activation. Uploading with `--no-wait` requires only `platform:write`; waiting for deployment events and history also requires `platform:read`. Failures exit nonzero and leave stdout empty. Update the management server together with the CLI so it can provide the complete URL, including its configured HTTPS port.
+After activation, the command prints `Deployment succeeded` and the app URL. For automation, use `widefleet deploy --json`: stdout contains one JSON object with the final deployment fields and `url`, while build output and progress go to stderr. The `id` field identifies the deployment and `appId` identifies the app. Existing scripts that parsed the default JSON output must add `--json`. With `--no-wait --json`, the result describes the queued deployment. Uploading with `--no-wait` requires only `platform:write`; waiting for deployment events and history also requires `platform:read`. Failures exit nonzero and leave stdout empty. Update the management server together with the CLI so it can provide the complete URL, including its configured HTTPS port.
 
-Output formats for other commands vary; use their own help rather than assuming `--json` is universal.
+Each command's help documents its output options.
 
 For a complete task, follow [sharing an app](/guides/applications) or
 [deployments and recovery](/guides/deployments).

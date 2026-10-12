@@ -34,14 +34,14 @@ export PLATFORM_SESSION_FILE="$HOME/.local/state/widefleet/session.json"
 widefleet login
 ```
 
-Keep this variable set for subsequent commands, including `widefleet logout`. The CLI creates a private directory (`0700`) and file (`0600`), renews tokens automatically and binds the file to the selected platform. File permissions do not prevent other processes running as your user from reading the tokens. Keep the file outside this project and shared artifacts. For externally managed credentials, an operator may supply a short-lived API access token as `PLATFORM_ACCESS_TOKEN`; it takes precedence over the saved session and is not renewed automatically. Never commit credentials.
+Keep this variable set for subsequent commands, including `widefleet logout`. The CLI creates a private directory (`0700`) and file (`0600`), renews tokens automatically and binds the file to the selected platform. Keep the file outside this project and shared artifacts. For externally managed credentials, an operator may supply a short-lived API access token as `PLATFORM_ACCESS_TOKEN`; it takes precedence over the saved session and is not renewed automatically. Never commit credentials. See [CLI authentication](https://widefleet.com/docs/reference/authentication) for session storage and renewal details.
 
 ## App contract
 
 - Edit `src/routes` to build your app. Read `locals.user` in server handlers; the server hook validates the platform identity headers.
 - Declare D1, R2, KV, queue producers/consumers, cron schedules, static assets and plain text variables in `wrangler.jsonc`. Resource names remain stable across deployments. The initial names are isolated per app.
-- The MVP supports a single bundled Worker module. The starter enables `nodejs_compat`; existing `nodejs_als` projects remain supported. Unsupported configuration is rejected.
-- App cookies are unavailable: the platform removes request cookies and response `Set-Cookie`. Do not implement a separate cookie login.
+- Build a single bundled Worker module. The starter enables `nodejs_compat`; existing `nodejs_als` projects remain supported. The CLI validates configuration before uploading.
+- Use `locals.user` for the platform's authenticated identity. The platform handles login, strips cookies from app requests and removes `Set-Cookie` from app responses.
 - Database and file contents survive code deployments and rollback. Apply schema migrations explicitly with `widefleet migrations`; deployments do not run them.
 - TypeScript uses strictest; `pnpm check` runs type checking, Oxfmt and type-aware Oxlint with anti-slop. Generated Worker JavaScript is excluded from TypeScript checking.
 
@@ -62,9 +62,9 @@ widefleet migrations apply DB
 
 Resources are created only when declared in `wrangler.jsonc`. Equal resource names in different apps/previews stay isolated. `d1_databases`, `r2_buckets`, `kv_namespaces`, `queues.producers`, `queues.consumers` and `triggers.crons` use Wrangler-style configuration. Keep identifiers stable to keep using the same data. Removing a binding does not migrate or erase its native data.
 
-Use the normal D1, R2, KV and Queue producer APIs from `env`. The dynamic runtime's adapters preserve D1 prepared statements/batches/sessions, R2 metadata/ranges/multipart operations, and KV text/JSON/bytes/metadata/listing. celld 0.6.1 does not implement `D1.dump()`, and customer-provided R2 encryption keys are unsupported. KV streams use native service-binding HTTP transport; celld still buffers values internally.
+Use the normal D1, R2, KV and Queue producer APIs from `env`. The dynamic runtime's adapters preserve D1 prepared statements/batches/sessions, R2 metadata/ranges/multipart operations, and KV text/JSON/bytes/metadata/listing. See [runtime compatibility](https://widefleet.com/docs/reference/runtime-compatibility) for supported methods and streaming behavior.
 
-A custom Worker entry module may export `scheduled(controller, env, ctx)` and `queue(batch, env, ctx)` alongside `fetch`. The platform forwards `waitUntil`, `noRetry`, message acknowledgments and retry decisions. The SvelteKit HTTP adapter does not create these handlers automatically; an entry wrapper must export them explicitly.
+A custom Worker entry module may export `scheduled(controller, env, ctx)` and `queue(batch, env, ctx)` alongside the generated SvelteKit `fetch` handler. The platform forwards `waitUntil`, `noRetry`, message acknowledgments and retry decisions.
 
 App Workflows require CLI and platform 0.3.0 or newer, a matching deployment agent and app runtime 0.2.0 or newer advertising Workflow support. Declare `workflows` entries with `binding`, `name` and `class_name`, and export the corresponding `WorkflowEntrypoint` classes from the main module alongside the generated HTTP handler. Use `widefleet workflows --help` for management commands. User-defined Durable Object namespaces remain outside the dynamic app contract.
 
@@ -82,17 +82,15 @@ widefleet network allow https://assets.example.com --browser
 widefleet network deny https://api.example.com
 ```
 
-Commands use this project's configured name; `--app NAME` selects another existing app. No UUID, policy file or manual revision is needed. Changes wait for activation unless `--no-wait` is supplied. Backend and browser lists start empty. Same-origin browser requests and resource bindings remain usable. Policy state is managed by the platform; do not add network settings to Wrangler configuration. Code rollback does not revert grants, and previews have their own permissions.
+Commands use this project's configured name; `--app NAME` selects another existing app. Changes wait for activation unless `--no-wait` is supplied. Backend and browser lists start empty. Same-origin browser requests and resource bindings remain usable. Manage network permissions through the platform CLI or UI. Grants persist across code rollbacks, and previews have their own permissions.
 
-A browser grant allows connections and resource loading, including scripts/styles, from that origin. CSP allows same-origin/inline scripts and styles; frames, objects and Web Workers are blocked. App headers cannot remove the policy. CSP does not prevent every browser action or external navigation; open tabs need a reload to receive changes. Backend redirects are checked at every hop. Body-preserving redirects can replay fully sent uploads up to 1 MiB; original uploads are streamed without that limit.
+A browser grant allows connections and resource loading, including scripts/styles, from that origin. The platform enforces CSP on app responses: same-origin/inline scripts and styles are allowed; frames, objects and Web Workers are blocked. Top-level navigation to external pages remains possible. Reload open tabs to receive policy changes. Backend redirects are checked at every hop. Body-preserving redirects can replay fully sent uploads up to 1 MiB; original uploads are streamed without that limit.
 
 ## Node.js compatibility
 
 With `"compatibility_flags": ["nodejs_compat"]`, Widefleet leaves Node builtins such as `node:buffer`, `node:crypto` and bare imports such as `path` for celld to resolve. npm dependencies are bundled locally, Worker package export conditions are enabled, and bundled CommonJS dependencies can require runtime builtins. Existing apps can opt in by changing this flag and redeploying with CLI 0.1.3 or newer against an updated management server.
 
-Support is limited to [celld 0.6.1's Node APIs](https://github.com/denoland/celld/blob/v0.6.1/docs/cloudflare-compat.md#nodejs-compatibility). Some APIs are partial or throw when called: for example, crypto ciphers and child processes are unavailable, and `fs` is restricted to celld's virtual filesystem. Successful bundling does not establish that every API used by a dependency works. This is not a full Node.js server runtime or complete Cloudflare compatibility.
-
-celld already exposes its implemented Node APIs and does not use `nodejs_compat` as a runtime switch. In Widefleet the explicit flag selects the matching bundler behavior; the compatibility date alone does not enable it. The agent continues to deploy prebundled code without running a build or package scripts.
+See [Node.js compatibility](https://widefleet.com/docs/reference/runtime-compatibility#nodejs-compatibility) for the supported API surface and runtime differences. The agent deploys the code bundled locally.
 
 The platform validates app snapshots before activation. Rejected updates retain the serving version; interrupted installations are recovered by the executor before subsequent work.
 
@@ -139,4 +137,4 @@ App telemetry currently covers HTTP console records and exceptions. RPC, Cron an
 
 ## IT connector bindings
 
-After IT grants a connector, call its native RPC methods directly, for example `env.ERP.listCustomers()`. IT supplies the connector's TypeScript interface. Use the normal CLI login and `widefleet connector bind erp --as ERP` from this app project (administrator permission required); `widefleet connector bindings` shows the current mapping and activation state. An explicit `--app NAME` selects another app. There is no `connect()` or generic `invoke()` step. Previews start without these grants; code rollback retains the current grants. Connector code and its optional Durable Objects are deployed separately with `widefleet connector deploy`.
+After IT grants a connector, call its native RPC methods directly, for example `env.ERP.listCustomers()`. IT supplies the connector's TypeScript interface. Use the normal CLI login and `widefleet connector bind erp --as ERP` from this app project (administrator permission required); `widefleet connector bindings` shows the current mapping and activation state. An explicit `--app NAME` selects another app. Configure grants separately for previews; code rollback retains the current grants. Connector code and its optional Durable Objects are deployed separately with `widefleet connector deploy`.
