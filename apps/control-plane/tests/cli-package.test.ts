@@ -98,11 +98,13 @@ describe.runIf(process.env["RUN_CLI_PACKAGE_TESTS"] === "1")(
 
       await mkdir(join(pnpmHome, "bin"), { recursive: true });
       await writeFile(join(directory, "npmrc"), "\n");
+      await writeFile(join(directory, "package.json"), JSON.stringify({ private: true }));
       environment = {
         ...process.env,
         PNPM_HOME: pnpmHome,
-        PATH: `${join(pnpmHome, "bin")}${delimiter}${searchPath}`,
+        PATH: `${pnpmHome}${delimiter}${join(pnpmHome, "bin")}${delimiter}${searchPath}`,
         NPM_CONFIG_USERCONFIG: join(directory, "npmrc"),
+        NPM_CONFIG_ENGINE_STRICT: "true",
         CI: "true",
         WIDEFLEET_TELEMETRY_DISABLED: "1",
         WRANGLER_SEND_METRICS: "false",
@@ -113,13 +115,15 @@ describe.runIf(process.env["RUN_CLI_PACKAGE_TESTS"] === "1")(
         if (key !== "PATH" && key.toUpperCase() === "PATH") delete environment[key];
     });
 
+    // Removing the isolated pnpm store and native toolchain can exceed the
+    // default hook timeout on Windows, even after each app has been removed.
     afterAll(async () => {
       await registry?.close();
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
       await rm(directory, { recursive: true, force: true });
-    });
+    }, 60_000);
 
     it("installs only the matching native package without scripts and builds an independent starter", async () => {
       await runPnpm(
@@ -145,32 +149,61 @@ describe.runIf(process.env["RUN_CLI_PACKAGE_TESTS"] === "1")(
         runPnpm(["exec", "widefleet", ...args], directory, environment);
 
       expect((await run("--version")).stdout.trim()).toBe(`widefleet ${version}`);
-      const project = join(directory, "app with spaces");
-      await run("init", project);
-      expect(await readFile(join(project, ".gitattributes"), "utf8")).toContain("eol=lf");
-      expect(await readFile(join(project, ".gitignore"), "utf8")).toContain("node_modules/");
-      expect(await readFile(join(project, "pnpm-lock.yaml"), "utf8")).toContain("lockfileVersion:");
-      await runPnpm(["install", "--frozen-lockfile"], project, environment);
-      await runPnpm(["check"], project, environment);
-      await runPnpm(["build"], project, environment);
-      expect(await readFile(join(project, "build/worker.js"), "utf8")).toBeTruthy();
 
-      const deployment = await runPnpm(
-        ["exec", "widefleet", "deploy", appId, "--skip-build", "--no-wait", "--json"],
-        project,
-        {
-          ...environment,
-          PLATFORM_URL: origin,
-          PLATFORM_ACCESS_TOKEN: "synthetic-package-token",
-        },
-      );
+      for (const template of ["sveltekit", "tanstack-start"]) {
+        const project = join(directory, `${template} app with spaces`);
 
-      expect(JSON.parse(deployment.stdout)).toMatchObject({
-        appId,
-        status: "queued",
-        url: "https://fixture.example.test",
-      });
-      expect(uploads).toBe(1);
+        try {
+          await run("init", project, ...(template === "sveltekit" ? [] : ["--template", template]));
+          expect(await readFile(join(project, ".gitattributes"), "utf8")).toContain("eol=lf");
+          expect(await readFile(join(project, ".gitignore"), "utf8")).toContain("node_modules/");
+          expect(await readFile(join(project, "pnpm-lock.yaml"), "utf8")).toContain(
+            "lockfileVersion:",
+          );
+
+          const { packageManager } = z
+            .object({ packageManager: z.string().startsWith("pnpm@") })
+            .parse(JSON.parse(await readFile(join(project, "package.json"), "utf8")));
+
+          expect((await runPnpm(["--version"], project, environment)).stdout.trim()).toBe(
+            packageManager.slice("pnpm@".length),
+          );
+          await runPnpm(["install", "--frozen-lockfile"], project, environment);
+          await runPnpm(["check"], project, environment);
+          await runPnpm(["build"], project, environment);
+          await runPnpm(["typecheck"], project, environment);
+          expect(
+            await readFile(
+              join(project, template === "sveltekit" ? "build/worker.js" : "build/server/index.js"),
+              "utf8",
+            ),
+          ).toBeTruthy();
+
+          const deployment = await runPnpm(
+            ["exec", "widefleet", "deploy", appId, "--skip-build", "--no-wait", "--json"],
+            project,
+            {
+              ...environment,
+              PLATFORM_URL: origin,
+              PLATFORM_ACCESS_TOKEN: "synthetic-package-token",
+            },
+          );
+
+          expect(JSON.parse(deployment.stdout)).toMatchObject({
+            appId,
+            status: "queued",
+            url: "https://fixture.example.test",
+          });
+          expect(uploads).toBe(template === "sveltekit" ? 1 : 2);
+        } finally {
+          // Remove each dependency tree here; deleting both can exceed the Windows hook timeout.
+          await rm(project, { recursive: true, force: true });
+        }
+      }
+
+      await expect(
+        run("init", join(directory, "invalid template"), "--template", "unknown"),
+      ).rejects.toThrow("invalid value");
     }, 180_000);
 
     // Node's signal API cannot emulate console Ctrl+C on Windows.
