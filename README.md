@@ -20,7 +20,7 @@ _The management workspace with synthetic example apps._
 
 ## What you can do
 
-- **Build with your own tools.** Start with an independent SvelteKit project, edit it with your coding agent and deploy through the [CLI](https://widefleet.com/docs/getting-started/installation).
+- **Build with your own tools.** Start with SvelteKit by default or choose TanStack Start for React, edit the independent project with your coding agent and deploy through the [CLI](https://widefleet.com/docs/getting-started/installation).
 - **Give colleagues access.** Use company SSO, manage [app access groups](https://widefleet.com/docs/reference/app-access) and make apps discoverable in the shared catalog.
 - **Keep app data together.** Declare databases, file storage and key-value bindings. [Runtime and storage](https://widefleet.com/docs/reference/runtime).
 - **Control system access.** Grant specific external destinations through [network permissions](https://widefleet.com/docs/guides/network) and expose IT-managed services through [connectors](https://widefleet.com/docs/guides/connectors).
@@ -51,7 +51,7 @@ The demo uses synthetic identities and local-only credentials. See [local develo
 
 ## Deploy your first app
 
-For an existing Widefleet installation, [install the CLI](https://widefleet.com/docs/getting-started/installation), Node.js 26 and pnpm 12.4.2. Create your app outside the platform checkout:
+For an existing Widefleet installation, [install the CLI](https://widefleet.com/docs/getting-started/installation), Node.js 22.18 or newer and pnpm 10.34.5 or newer. Create your app outside the platform checkout:
 
 ```sh
 widefleet init my-app

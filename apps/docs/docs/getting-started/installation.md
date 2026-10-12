@@ -11,7 +11,8 @@ access to a Widefleet installation; if you do not have one yet, start with the
 ## Install the CLI
 
 The CLI supports Linux x64 with glibc, macOS on Apple Silicon and Intel,
-and Windows x64. Install Node.js 26 and pnpm 12.4.2 for app development.
+and Windows x64. For app development, use Node.js 22.18 or newer and an existing
+pnpm 10.34.5 or newer installation.
 
 ```sh
 pnpm add --global widefleet
@@ -22,7 +23,7 @@ If pnpm reports that its global bin directory is missing from PATH, run `pnpm se
 
 To update, rerun the install command. To uninstall, run `pnpm remove --global widefleet`. pnpm owns the complete installation directory; keep its package contents together.
 
-The CLI includes its native executable, bundler and SvelteKit starter. App
+The CLI includes its native executable, bundler and app starters. App
 developers do not need Docker or a checkout of the platform repository when
 connecting to an existing installation.
 
@@ -34,6 +35,15 @@ cd my-app
 pnpm install --frozen-lockfile
 pnpm dev
 ```
+
+This creates the default SvelteKit project. For React, see the
+[TanStack Start template and release requirements](/reference/cli#create-a-project).
+
+Both projects pin pnpm 12.4.2 in `packageManager`. With pnpm's default version
+management, an existing pnpm 10.34.5 or newer installation automatically downloads
+and runs that version when you run a command inside the project.
+pnpm 10.34.5 includes the [version-switching fix](https://github.com/pnpm/pnpm/releases/tag/v10.34.5)
+needed to start pnpm 12 on macOS and Windows.
 
 The starter includes a notes app, a D1 database, private R2 file storage and a
 server-side identity helper. Local development uses a synthetic user. Open the
