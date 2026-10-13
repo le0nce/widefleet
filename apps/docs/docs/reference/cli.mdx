@@ -1,7 +1,7 @@
 ---
 title: CLI
 description: Common Widefleet commands, app selection, authentication and deployment output.
-lastModified: 2026-10-12
+lastModified: 2026-10-13
 ---
 
 For installation and your first deployment, start with [CLI setup](/getting-started/installation).
@@ -47,6 +47,7 @@ IDs with `widefleet apps` and deployment IDs and artifact IDs with `widefleet hi
 | `widefleet rollback APP_UUID ARTIFACT_UUID`      | Activate a retained code artifact.                                   |
 | `widefleet logs --level error --since 1h`        | Query app runtime errors; `--follow` keeps polling.                  |
 | `widefleet migrations list DB` / `apply DB`      | Inspect or explicitly apply SQL migrations to a deployed D1 binding. |
+| `widefleet crons list` / `runs` / `run CRON`     | Inspect Cron schedules and run history, or start a schedule now.     |
 | `widefleet access`                               | Inspect app usage rules; `set` changes the group list.               |
 | `widefleet network`                              | Inspect external destinations; `allow` and `deny` change grants.     |
 | `widefleet connector bindings`                   | Inspect IT-managed connector bindings.                               |
@@ -56,7 +57,7 @@ IDs with `widefleet apps` and deployment IDs and artifact IDs with `widefleet hi
 | `widefleet delete APP_UUID --yes`                | Request removal of an app and all its previews.                      |
 
 The target is the selected platform URL plus `name` in `wrangler.jsonc`. The first deploy creates that app; subsequent deploys update it after checking the user's app permissions. A changed name selects a different app. The server assigns the host, and existing apps keep their host and data.
-Logs, access, network, connections and migrations also use project context; history, events and
+Logs, access, network, connections, migrations and crons also use project context; history, events and
 rollback require IDs. Each command's help lists its selection options.
 
 See [connector discovery and app connections](/guides/connectors#find-connectors-and-inspect-your-app)

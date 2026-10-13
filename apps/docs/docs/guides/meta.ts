@@ -9,6 +9,7 @@ export default defineMeta({
     "deployments",
     "migrations",
     "workflows",
+    "cron",
     "network",
     "connectors",
   ],

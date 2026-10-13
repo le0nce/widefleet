@@ -1,7 +1,7 @@
 ---
 title: Application runtime
 description: Runtime versions, activation, recovery, storage and supported app APIs.
-lastModified: 2026-10-12
+lastModified: 2026-10-13
 ---
 
 One default celld fleet runs the installation's apps and previews as separate Dynamic Workers. The installer manages one node. Fleet identity is stored in PostgreSQL and remains unchanged when an executor is registered, disabled or replaced. A replacement executor reuses the same Docker host, persistent node state, routing directory and fleet storage.
@@ -46,7 +46,7 @@ The [celld/Cloudflare comparison](/reference/runtime-compatibility) separates na
 | D1               | Prepared statements, batch transactions, raw rows and sessions are forwarded. `dump()` is unsupported by celld 0.6.1.                                                                                                                          |
 | R2               | Bodies, metadata, conditions, ranges and multipart uploads are supported. Customer-provided encryption keys are unsupported.                                                                                                                   |
 | KV               | Text, JSON, bytes, metadata, bulk reads and listing are supported. Streams use the native HTTP service-binding transport because celld 0.6.1 cannot clone streams through custom RPC; celld still buffers values internally.                   |
-| Cron / Queues    | Declared schedules and consumers call the app's `scheduled`/`queue` handlers, including `waitUntil`, acknowledgment and retry decisions.                                                                                                       |
+| Cron / Queues    | Declared schedules and consumers call the app's `scheduled`/`queue` handlers, including `waitUntil`, acknowledgment and retry decisions. See [Cron schedules](/guides/cron) for run history and timing.                                        |
 | Telemetry        | App HTTP tails provide console logs and exceptions. celld's Dynamic Worker tails do not cover RPC, Cron or Queue executions; native distributed traces are not exported through this app channel. See [telemetry](/self-hosting/runtime-logs). |
 | Dynamic capacity | celld 0.6.1 has a native limit of 256 loaded dynamic instances per process, with at most 255 from one loader generation. The limit counts loaded instances; unreferenced instances are eligible for collection.                                |
 | Scaling          | One managed node initially; no automatic node provisioning or load balancing. A node failure affects all apps on it.                                                                                                                           |
