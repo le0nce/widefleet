@@ -63,6 +63,7 @@ await writeFile(
     version,
     celld: "0.6.2",
     workflows: 1,
+    crons: 1,
     main: "loader.js",
     modules: [
       { name: "loader.js", source, sha256: createHash("sha256").update(source).digest("hex") },

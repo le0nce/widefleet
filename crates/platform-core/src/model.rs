@@ -175,6 +175,7 @@ pub enum JobKind {
     Configure,
     Migrations,
     Workflows,
+    Crons,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -186,6 +187,8 @@ pub struct Job {
     pub migration: Option<crate::migrations::ArtifactReference>,
     pub access: Option<AppAccessSnapshot>,
     pub workflow: Option<serde_json::Value>,
+    #[serde(default)]
+    pub cron: Option<String>,
     pub network: Option<NetworkSnapshot>,
     pub capabilities: Option<CapabilitySnapshot>,
     pub app_id: Option<Uuid>,
@@ -277,6 +280,8 @@ pub struct RuntimeRelease {
     pub celld: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflows: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crons: Option<u32>,
     pub main: String,
     pub modules: Vec<ReleaseModule>,
 }

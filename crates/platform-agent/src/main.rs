@@ -1,6 +1,7 @@
 mod access;
 mod artifact;
 mod config;
+mod crons;
 mod docker;
 #[cfg(test)]
 mod execution_tests;
@@ -77,14 +78,33 @@ async fn execute(
             .await
             .map(|entries| Some(value!({ "migrations": entries })));
     }
-    if matches!(job.kind, JobKind::Workflows) {
-        let token = fleet::workflow_control(configuration, job)
+    if matches!(job.kind, JobKind::Crons) {
+        let token = fleet::control_token(configuration, job, |runtime| runtime.crons == Some(1))
             .await?
             .ok_or_else(|| {
                 Error::invalid(
-                    "Install an app runtime with Workflow support before managing workflows".into(),
+                    "Install an app runtime with Cron support before running schedules on demand"
+                        .into(),
                 )
             })?;
+        let cron = job
+            .cron
+            .as_deref()
+            .ok_or_else(|| Error::invalid("Cron job has no schedule".into()))?;
+        docker::ensure(docker, configuration, job, &["CELLD_OTEL=0".into()]).await?;
+        docker::cron_request(docker, job, &token, cron).await?;
+        return Ok(None);
+    }
+    if matches!(job.kind, JobKind::Workflows) {
+        let token =
+            fleet::control_token(configuration, job, |runtime| runtime.workflows == Some(1))
+                .await?
+                .ok_or_else(|| {
+                    Error::invalid(
+                        "Install an app runtime with Workflow support before managing workflows"
+                            .into(),
+                    )
+                })?;
         let request = job
             .workflow
             .clone()
@@ -104,7 +124,9 @@ async fn execute(
             "Removing this app and its owned files from the shared fleet",
         )
         .await?;
-        if let Some(token) = fleet::workflow_control(configuration, job).await? {
+        if let Some(token) =
+            fleet::control_token(configuration, job, |runtime| runtime.workflows == Some(1)).await?
+        {
             docker::ensure(docker, configuration, job, &["CELLD_OTEL=0".into()]).await?;
             loop {
                 let result =
@@ -155,6 +177,11 @@ async fn execute(
     } else {
         telemetry::destination(api, configuration, job).await?
     };
+    let cron_reports = if artifact.is_none() {
+        None
+    } else {
+        Some(crons::destination(api, configuration, job).await?)
+    };
     let prepared = fleet::prepare(
         configuration,
         job,
@@ -162,6 +189,7 @@ async fn execute(
         &packages,
         temporary.path(),
         telemetry,
+        cron_reports,
     )
     .await?;
     let activation = async {
@@ -293,7 +321,7 @@ async fn run(
         let claimed = async {
             json::<Option<Job>>(
                 api.authenticated(Method::POST, "/agent/jobs/claim", &configuration.token)
-                    .json(&value!({ "accessRules": 1 }))
+                    .json(&value!({ "accessRules": 1, "cronRuns": 1 }))
                     .send()
                     .await?,
             )

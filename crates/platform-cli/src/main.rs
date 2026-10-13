@@ -5,6 +5,7 @@ mod catalog;
 mod configuration;
 mod connections;
 mod connector;
+mod crons;
 mod deploy;
 mod discovery;
 mod groups;
@@ -79,6 +80,8 @@ enum Command {
     Migrations(migrations::Options),
     /// Start, inspect and manage app Workflow instances.
     Workflows(workflows::Options),
+    /// List app Cron schedules, inspect their run history and start a run now.
+    Crons(crons::Options),
     /// Show, allow or deny app network destinations.
     Network(network::Options),
     /// Manage app access groups inherited automatically by every preview.
@@ -218,6 +221,7 @@ async fn run(args: Arguments) -> Result<()> {
         Command::Logs(options) => logs::run(&api, &credentials, options).await,
         Command::Migrations(options) => migrations::run(&api, &credentials, options).await,
         Command::Workflows(options) => workflows::run(&api, &credentials, options).await,
+        Command::Crons(options) => crons::run(&api, &credentials, options).await,
         Command::Network(options) => network::run(&api, &credentials, options).await,
         Command::Access(options) => access::run(&api, &credentials, options).await,
         Command::Connector(options) => connector::run(&api, &credentials, options).await,
@@ -377,6 +381,7 @@ async fn main() {
         Command::Logs(_) => "logs",
         Command::Migrations(_) => "migrations",
         Command::Workflows(_) => "workflows",
+        Command::Crons(_) => "crons",
         Command::Network(_) => "network",
         Command::Access(_) => "access",
         Command::Connector(_) => "connector",

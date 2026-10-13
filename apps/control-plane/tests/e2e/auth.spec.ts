@@ -12,6 +12,7 @@ import {
   apps,
   artifacts,
   connectors,
+  cronRuns,
   deployments,
   jobs,
 } from "../../src/lib/server/schema.ts";
@@ -747,6 +748,115 @@ test("submits a selective Workflow restart and waits for the agent's confirmatio
   await expect(
     page.getByText("Previously completed steps will run again.", { exact: true }),
   ).toBeVisible();
+});
+
+test("shows Cron history and distinguishes a requested run from one the agent started", async ({
+  page,
+  context,
+}) => {
+  const session = await environment.users.login({ userId: environment.owner.id });
+  await context.addCookies(
+    session.cookies.map((cookie) => ({
+      ...cookie,
+      domain: "localhost",
+      sameSite: "Lax",
+      secure: false,
+    })),
+  );
+
+  const created = await context.request.post("/api/v1/apps", {
+    headers: { origin: environment.configuration.PLATFORM_URL },
+    data: { slug: "cron-history-ui", displayName: "Cron History Example" },
+  });
+
+  expect(created.ok()).toBe(true);
+  const record = app.parse(await created.json());
+  const artifactId = crypto.randomUUID();
+  const deploymentId = crypto.randomUUID();
+  await environment.database.db.insert(artifacts).values(
+    artifact.parse({
+      id: artifactId,
+      appId: record.id,
+      metadata: {
+        main_module: "worker.js",
+        compatibility_date: "2026-10-01",
+        assets: { upload_session: crypto.randomUUID() },
+        crons: ["*/15 * * * *", "0 6 * * 2-6"],
+      },
+      manifest: {},
+      modules: [{ name: "worker.js", type: "esm", sha256: "0".repeat(64), size: 0 }],
+    }),
+  );
+  await environment.database.db.insert(deployments).values({
+    id: deploymentId,
+    appId: record.id,
+    artifactId,
+    requestId: crypto.randomUUID(),
+    status: "succeeded",
+    finishedAt: new Date(),
+  });
+  await environment.database.db
+    .update(apps)
+    .set({ state: "active", activeDeploymentId: deploymentId })
+    .where(eq(apps.id, record.id));
+  await environment.database.db.insert(cronRuns).values([
+    {
+      id: crypto.randomUUID(),
+      appId: record.id,
+      deploymentId,
+      cron: "*/15 * * * *",
+      trigger: "schedule",
+      scheduledAt: new Date("2026-10-13T09:00:00.000Z"),
+      startedAt: new Date("2026-10-13T09:00:01.000Z"),
+      finishedAt: new Date("2026-10-13T09:00:02.400Z"),
+      error: "Error: Synthetic upstream timeout",
+    },
+    {
+      id: crypto.randomUUID(),
+      appId: record.id,
+      deploymentId,
+      cron: "*/15 * * * *",
+      trigger: "schedule",
+      scheduledAt: new Date("2026-10-13T09:15:00.000Z"),
+      startedAt: new Date("2026-10-13T09:15:01.000Z"),
+      finishedAt: new Date("2026-10-13T09:15:01.250Z"),
+      error: null,
+    },
+  ]);
+
+  await page.goto(`/apps/${record.id}/crons`, { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Cron schedules", exact: true })).toBeVisible();
+  await expect(page.getByText("0 6 * * 2-6", { exact: true })).toBeVisible();
+  await expect(page.getByText("No recorded runs yet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Error: Synthetic upstream timeout", { exact: true })).toBeVisible();
+  await expect(page.getByText("250 ms", { exact: false })).toBeVisible();
+
+  const schedule = page.getByRole("listitem").filter({ hasText: "0 6 * * 2-6" });
+  await schedule.getByRole("button", { name: "Run now", exact: true }).click();
+  await expect(
+    schedule.getByText("Requested — waiting for the agent.", { exact: true }),
+  ).toBeVisible();
+  await expect(schedule.getByRole("button", { name: "Starting …", exact: true })).toBeDisabled();
+
+  const [job] = await environment.database.db
+    .select()
+    .from(jobs)
+    .where(and(eq(jobs.appId, record.id), eq(jobs.kind, "crons")));
+
+  expect(job?.cron).toBe("0 6 * * 2-6");
+
+  if (!job) throw new Error("Missing Cron run request");
+  await environment.database.db
+    .update(jobs)
+    .set({
+      state: "succeeded",
+      result: { leaseToken: crypto.randomUUID(), outcome: "succeeded", message: "Run started" },
+    })
+    .where(eq(jobs.id, job.id));
+  await expect(
+    schedule.getByText("Run started. Its result appears in the history.", { exact: true }),
+  ).toBeVisible();
+  await expect(schedule.getByRole("button", { name: "Run now", exact: true })).toBeEnabled();
 });
 
 test("confirms discarded workflow drafts on section, history and document navigation", async ({

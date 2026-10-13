@@ -16,6 +16,8 @@ export * from "./directory.ts";
 
 export * from "./reporting.ts";
 
+export * from "./crons.ts";
+
 export const protocolVersion = 1;
 
 export const identifier = z.uuid();
@@ -268,6 +270,7 @@ export const runtimeRelease = z.strictObject({
   version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/),
   celld: z.literal("0.6.2"),
   workflows: z.literal(1).optional(),
+  crons: z.literal(1).optional(),
   main: z.literal("loader.js"),
   modules: z
     .array(
@@ -464,8 +467,10 @@ export const job = z.strictObject({
     "configure",
     "migrations",
     "workflows",
+    "crons",
   ]),
   workflow: workflowRequest.nullable().default(null),
+  cron: z.string().nullable().default(null),
   migration: migrationArtifact.nullable().default(null),
   access: appAccessSnapshot.nullable(),
   network: networkSnapshot.nullable(),

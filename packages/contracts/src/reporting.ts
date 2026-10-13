@@ -67,6 +67,7 @@ export const reportingOperation = z.strictObject({
     "configure",
     "migrations",
     "workflows",
+    "crons",
   ]),
   outcome: z.enum(["succeeded", "failed"]),
   elapsed_ms: z.number().min(0),

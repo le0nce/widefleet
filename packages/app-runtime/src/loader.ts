@@ -7,6 +7,7 @@ import { workerCode } from "./worker.ts";
 import { browserPolicy } from "./csp.ts";
 import { serveAsset } from "./assets.ts";
 import { appKey, readApp } from "./catalog.ts";
+import { deliverCron } from "./crons.ts";
 import type { WorkflowRunner } from "./workflow-runner.ts";
 import type { Events } from "./events.ts";
 import type { ParentEnvironment, PublishedApp, Json } from "./types.ts";
@@ -52,6 +53,20 @@ const run = async <T>(
   }
 };
 
+const runCron = (
+  app: PublishedApp,
+  environment: ParentEnvironment,
+  context: ExecutionContext,
+  input: Parameters<typeof deliverCron>[2],
+) =>
+  deliverCron(app, environment, input, () =>
+    run(app, environment, context, (worker) =>
+      worker
+        .getEntrypoint<Events>("Events")
+        .runScheduled({ cron: input.cron, scheduledTime: input.scheduledTime }),
+    ),
+  );
+
 export default {
   async fetch(request: Request, environment: ParentEnvironment, context: ExecutionContext) {
     const url = new URL(request.url);
@@ -92,6 +107,50 @@ export default {
               );
 
         return Response.json({ result: workflowJson(result) });
+      } catch (error) {
+        return Response.json(
+          { error: error instanceof Error ? error.message : String(error) },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (url.pathname === "/.well-known/widefleet/crons") {
+      if (
+        request.method !== "POST" ||
+        request.headers.get("authorization") !== `Bearer ${environment.WIDEFLEET_CONTROL_TOKEN}`
+      )
+        return new Response(null, { status: 403 });
+
+      try {
+        const input = z
+          .strictObject({
+            appId: z.uuid(),
+            hostname: z.string().regex(/^[a-z0-9.-]+$/),
+            runId: z.uuid(),
+            cron: z.string().min(1),
+          })
+          .parse(await request.json());
+
+        const app = await readApp(environment, `hosts/${input.hostname}.json`);
+
+        if (app?.appId !== input.appId) throw new Error("App is not published");
+
+        if (!app.metadata.crons.includes(input.cron))
+          throw new Error("The published app does not declare this Cron schedule");
+
+        // A manual run uses the scheduled-run path but bypasses celld's
+        // per-script serialization and retries. Respond once it has started.
+        context.waitUntil(
+          runCron(app, environment, context, {
+            id: input.runId,
+            cron: input.cron,
+            trigger: "manual",
+            scheduledTime: Date.now(),
+          }),
+        );
+
+        return Response.json({ runId: input.runId });
       } catch (error) {
         return Response.json(
           { error: error instanceof Error ? error.message : String(error) },
@@ -179,11 +238,12 @@ export default {
 
         if (!app || !app.metadata.crons.includes(controller.cron)) return;
 
-        const result = await run(app, environment, context, (worker) =>
-          worker
-            .getEntrypoint<Events>("Events")
-            .runScheduled({ cron: controller.cron, scheduledTime: controller.scheduledTime }),
-        );
+        const result = await runCron(app, environment, context, {
+          id: crypto.randomUUID(),
+          cron: controller.cron,
+          trigger: "schedule",
+          scheduledTime: controller.scheduledTime,
+        });
 
         if (result.error && !result.noRetry) throw new Error(result.error);
       }),

@@ -50,6 +50,7 @@
     { id: "deployments", label: "Deployments" },
     { id: "connections", label: "Connections" },
     { id: "workflows", label: "Workflows" },
+    { id: "crons", label: "Cron" },
     { id: "access", label: "Access" },
     { id: "settings", label: "App settings" },
   ];

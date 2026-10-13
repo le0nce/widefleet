@@ -1,4 +1,5 @@
 import { createWorkflowService } from "../src/lib/server/workflows.ts";
+import { createCronService } from "../src/lib/server/crons.ts";
 import { createMigrationService } from "../src/lib/server/migrations.ts";
 import { createConnectorService } from "../src/lib/server/connectors.ts";
 import { createRuntimeReleaseService } from "../src/lib/server/runtime-releases.ts";
@@ -203,6 +204,7 @@ describe.runIf(process.env["RUN_TELEMETRY_TESTS"] === "1")(
         network: createNetworkService(environment.database.db),
         appAccess: createAppAccessService(environment.database.db),
         workflows: createWorkflowService(environment.database.db),
+        crons: createCronService(environment.database.db, configuration),
         migrations: createMigrationService(environment.database.db, storage),
         connectors: createConnectorService(
           environment.database.db,

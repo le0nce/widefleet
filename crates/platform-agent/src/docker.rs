@@ -862,17 +862,15 @@ pub async fn remove(configuration: &Configuration, job: &Job) -> Result<()> {
     }
 }
 
-pub async fn workflow_request(
+async fn control_request(
     docker: &Docker,
     job: &Job,
     token: &str,
-    request: Value,
+    path: &str,
+    body: Value,
 ) -> Result<Value> {
     // Argument-vector execution: request text is never interpreted by a shell.
-    let body = serde_json::to_string(
-        &value!({ "appId": job.app_id()?, "hostname": job.hostname()?, "requestId": job.id, "request": request }),
-    )?;
-    let response = execute_json(
+    execute_json(
         docker,
         job,
         vec![
@@ -887,15 +885,47 @@ pub async fn workflow_request(
             "-H".into(),
             "Content-Type: application/json".into(),
             "--data-binary".into(),
-            body,
-            "http://127.0.0.1:8080/.well-known/widefleet/workflows".into(),
+            serde_json::to_string(&body)?,
+            format!("http://127.0.0.1:8080/.well-known/widefleet/{path}"),
         ],
+    )
+    .await
+}
+
+pub async fn workflow_request(
+    docker: &Docker,
+    job: &Job,
+    token: &str,
+    request: Value,
+) -> Result<Value> {
+    let response = control_request(
+        docker,
+        job,
+        token,
+        "workflows",
+        value!({ "appId": job.app_id()?, "hostname": job.hostname()?, "requestId": job.id, "request": request }),
     )
     .await?;
     response
         .get("result")
         .cloned()
         .ok_or_else(|| Error::invalid("Workflow runtime returned no result".into()))
+}
+
+/// Starts the app's scheduled handler; the runtime reports the run itself.
+pub async fn cron_request(docker: &Docker, job: &Job, token: &str, cron: &str) -> Result<()> {
+    let response = control_request(
+        docker,
+        job,
+        token,
+        "crons",
+        value!({ "appId": job.app_id()?, "hostname": job.hostname()?, "runId": job.id, "cron": cron }),
+    )
+    .await?;
+    if response.get("runId").and_then(Value::as_str) != Some(job.id.to_string().as_str()) {
+        return Err(Error::invalid("Cron runtime did not start the run".into()));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

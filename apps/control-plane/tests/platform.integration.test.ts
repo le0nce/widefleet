@@ -1,4 +1,5 @@
 import { createWorkflowService } from "../src/lib/server/workflows.ts";
+import { createCronService } from "../src/lib/server/crons.ts";
 import { createMigrationService } from "../src/lib/server/migrations.ts";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
@@ -34,6 +35,7 @@ import {
   agents,
   apps,
   artifacts,
+  cronRuns,
   deployments,
   fleets,
   jobs,
@@ -112,6 +114,7 @@ describe("Platform API with PostgreSQL and RustFS", () => {
       network: createNetworkService(environment.database.db),
       appAccess: createAppAccessService(environment.database.db),
       workflows: createWorkflowService(environment.database.db),
+      crons: createCronService(environment.database.db, configuration),
       migrations: createMigrationService(environment.database.db, storage),
       connectors: createConnectorService(
         environment.database.db,
@@ -637,6 +640,7 @@ describe("Platform API with PostgreSQL and RustFS", () => {
     code = "export default { fetch() { return new Response('ok'); } }",
     credentials = adminHeaders,
     bindings: z.infer<typeof contract.workerMetadata>["bindings"] = [],
+    crons: string[] = [],
   ) => {
     const form = new FormData();
     form.set(
@@ -646,6 +650,7 @@ describe("Platform API with PostgreSQL and RustFS", () => {
         compatibility_date: "2026-10-01",
         assets: { upload_session: sessionId },
         bindings,
+        crons,
       }),
     );
     form.set("worker.js", new Blob([code], { type: "application/javascript+module" }), "worker.js");
@@ -1765,6 +1770,205 @@ describe("Platform API with PostgreSQL and RustFS", () => {
       .update(jobs)
       .set({ state: "failed" })
       .where(eq(jobs.id, listing.id));
+  });
+
+  it("validates Cron schedules, records scoped run reports and queues manual runs", async () => {
+    const app = await createApp("cron-history");
+
+    const invalid = await publish(
+      app.id,
+      (await start(app.id)).id,
+      undefined,
+      undefined,
+      adminHeaders,
+      [],
+      ["*/60 * * * *"],
+    );
+
+    expect(invalid.status).toBe(400);
+    expect(await invalid.text()).toContain("minute field has a step 60 outside 1-59");
+
+    const deployment = contract.deployment.parse(
+      await (
+        await publish(
+          app.id,
+          (await start(app.id)).id,
+          undefined,
+          undefined,
+          adminHeaders,
+          [],
+          ["*/5 * * * *", "0 9 * * 2-6"],
+        )
+      ).json(),
+    );
+
+    await environment.database.db
+      .update(jobs)
+      .set({ state: "succeeded" })
+      .where(eq(jobs.deploymentId, deployment.id));
+    await environment.database.db
+      .update(apps)
+      .set({ activeDeploymentId: deployment.id, state: "active" })
+      .where(eq(apps.id, app.id));
+
+    const path = `/apps/${app.id}/crons`;
+    expect((await json(path, "GET", undefined, outsiderHeaders)).status).toBe(404);
+    expect(z.array(contract.cronSchedule).parse(await (await json(path, "GET")).json())).toEqual([
+      { cron: "*/5 * * * *", lastRun: null },
+      { cron: "0 9 * * 2-6", lastRun: null },
+    ]);
+
+    const credentials = createCronService(
+      environment.database.db,
+      environment.configuration,
+    ).credentials(app.id);
+
+    const report = (
+      body: Record<string, string | null>,
+      token = credentials.token,
+      target = app.id,
+    ) =>
+      api(
+        new Request(`${environment.configuration.PLATFORM_URL}/api/v1/crons/${target}/runs`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+
+    const run = {
+      id: crypto.randomUUID(),
+      deploymentId: deployment.id,
+      cron: "*/5 * * * *",
+      trigger: "schedule",
+      scheduledAt: "2026-10-13T10:05:00.000Z",
+      startedAt: "2026-10-13T10:05:01.000Z",
+      finishedAt: null,
+      error: null,
+    };
+
+    const other = await createApp("cron-other");
+
+    const otherToken = createCronService(
+      environment.database.db,
+      environment.configuration,
+    ).credentials(other.id).token;
+
+    expect((await report(run, otherToken)).status).toBe(401);
+    expect((await report(run, `cron_${"0".repeat(64)}`)).status).toBe(401);
+    expect((await report(run, credentials.token, "not-an-app")).status).toBe(404);
+    expect((await report({ ...run, extra: "unexpected" })).status).toBe(400);
+    expect((await report(run)).status).toBe(204);
+
+    const runs = async (query = "") =>
+      z.array(contract.cronRun).parse(await (await json(`${path}/runs${query}`, "GET")).json());
+
+    expect(await runs()).toMatchObject([{ id: run.id, status: "running", finishedAt: null }]);
+
+    const failed = { ...run, finishedAt: "2026-10-13T10:05:03.000Z", error: "Error: synthetic" };
+    expect((await report(failed)).status).toBe(204);
+    // A delayed start report must not reopen a finished run.
+    expect((await report(run)).status).toBe(204);
+    expect(await runs()).toMatchObject([
+      { id: run.id, status: "failed", error: "Error: synthetic" },
+    ]);
+    // A run ID from another app cannot overwrite this app's history.
+    expect((await report({ ...failed, error: null }, otherToken, other.id)).status).toBe(204);
+    expect((await runs())[0]).toMatchObject({ status: "failed" });
+
+    for (let index = 0; index < 101; index++) {
+      const startedAt = new Date(Date.parse("2026-10-13T11:00:00.000Z") + index * 60000);
+      expect(
+        (
+          await report({
+            ...run,
+            id: crypto.randomUUID(),
+            cron: "0 9 * * 2-6",
+            startedAt: startedAt.toISOString(),
+            finishedAt: startedAt.toISOString(),
+          })
+        ).status,
+      ).toBe(204);
+    }
+
+    const retained = await environment.database.db
+      .select()
+      .from(cronRuns)
+      .where(eq(cronRuns.appId, app.id));
+
+    expect(retained).toHaveLength(100);
+    expect(retained.some((entry) => entry.id === run.id)).toBe(false);
+    expect(await runs("?limit=3")).toHaveLength(3);
+    expect((await json(`${path}/runs?limit=101`, "GET")).status).toBe(400);
+    expect(await runs(`?cron=${encodeURIComponent("*/5 * * * *")}`)).toEqual([]);
+    expect(
+      z.array(contract.cronSchedule).parse(await (await json(path, "GET")).json())[1]?.lastRun,
+    ).toMatchObject({ cron: "0 9 * * 2-6", status: "succeeded" });
+
+    const runPath = `${path}/runs`;
+    expect(
+      (await json(runPath, "POST", { cron: "* * * * *" }, adminHeaders, crypto.randomUUID()))
+        .status,
+    ).toBe(404);
+    expect(
+      (await json(runPath, "POST", { cron: "*/5 * * * *" }, outsiderHeaders, crypto.randomUUID()))
+        .status,
+    ).toBe(404);
+
+    // Agents that do not advertise Cron support fail the run instead of blocking the fleet.
+    const refused = crypto.randomUUID();
+    expect(
+      contract.cronOperation.parse(
+        await (await json(runPath, "POST", { cron: "*/5 * * * *" }, adminHeaders, refused)).json(),
+      ),
+    ).toEqual({ id: refused, state: "queued", message: null });
+    const legacy = await json("/agent/jobs/claim", "POST", { accessRules: 1 }, agentHeaders);
+    expect(await legacy.json()).toBeNull();
+    expect(await (await json(`${path}/operations/${refused}`, "GET")).json()).toEqual({
+      id: refused,
+      state: "failed",
+      message: "Upgrade the deployment agent to run Cron schedules on demand",
+    });
+
+    const key = crypto.randomUUID();
+    const queued = await json(runPath, "POST", { cron: "*/5 * * * *" }, adminHeaders, key);
+    expect(queued.status).toBe(200);
+    expect(
+      await (await json(runPath, "POST", { cron: "*/5 * * * *" }, adminHeaders, key)).json(),
+    ).toEqual(await queued.json());
+    expect((await json(runPath, "POST", { cron: "0 9 * * 2-6" }, adminHeaders, key)).status).toBe(
+      409,
+    );
+
+    const claimed = contract.job.parse(
+      await (
+        await json("/agent/jobs/claim", "POST", { accessRules: 1, cronRuns: 1 }, agentHeaders)
+      ).json(),
+    );
+
+    expect(claimed).toMatchObject({ id: key, kind: "crons", cron: "*/5 * * * *", appId: app.id });
+    expect(
+      (
+        await json(
+          `/agent/jobs/${key}/complete`,
+          "POST",
+          { leaseToken: claimed.leaseToken, outcome: "succeeded", message: "Run started" },
+          agentHeaders,
+        )
+      ).status,
+    ).toBe(200);
+    expect(await (await json(`${path}/operations/${key}`, "GET")).json()).toEqual({
+      id: key,
+      state: "succeeded",
+      message: "Run started",
+    });
+    expect(reportedOperations.at(-1)).toMatchObject({ operation: "crons", outcome: "succeeded" });
+
+    await environment.database.db
+      .update(apps)
+      .set({ state: "deleting" })
+      .where(eq(apps.id, app.id));
+    expect((await report({ ...run, id: crypto.randomUUID() })).status).toBe(403);
   });
 
   it("reports failed code separately from permissions already active on the serving app", async () => {

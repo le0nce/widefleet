@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { forward, followRedirects } from "@platform/app-runtime/network";
+import { cronReportKey, cronRunReport } from "@platform/contracts";
 import { transform } from "esbuild";
 import { getCACertificates, setDefaultCACertificates } from "node:tls";
 import { execFile, spawn } from "node:child_process";
@@ -38,6 +39,7 @@ describe.runIf(process.env["RUN_DYNAMIC_TESTS"] === "1")(
     const cancellationRequests = new Map<string, { response: ServerResponse; closed: boolean }>();
     const telemetryRecords: { authorization: string | undefined; body: string }[] = [];
     const deploymentId = crypto.randomUUID();
+    const appId = crypto.randomUUID();
     let allowedOrigin: string;
     let deniedOrigin: string;
     let origin: string;
@@ -97,6 +99,13 @@ describe.runIf(process.env["RUN_DYNAMIC_TESTS"] === "1")(
         { timeout: 20000 },
       );
     };
+
+    const cronReports = () =>
+      telemetryRecords.flatMap((record) =>
+        record.authorization === "Bearer fixture-cron-only"
+          ? [cronRunReport.parse(JSON.parse(record.body))]
+          : [],
+      );
 
     const call = async (operation: string, fields: Record<string, string> = {}) => {
       const response = await fetch(`${origin}/?${new URLSearchParams({ operation, ...fields })}`);
@@ -261,7 +270,6 @@ describe.runIf(process.env["RUN_DYNAMIC_TESTS"] === "1")(
       ).code;
 
       const hash = createHash("sha256").update(source).digest("hex");
-      const appId = crypto.randomUUID();
       const version = crypto.randomUUID();
 
       const assetFiles = [
@@ -355,6 +363,7 @@ describe.runIf(process.env["RUN_DYNAMIC_TESTS"] === "1")(
             for (const asset of ${JSON.stringify(assetFiles)}) await env.WIDEFLEET_PACKAGES.put('apps/${appId}/assets/' + asset.hash, asset.text);
             await env.WIDEFLEET_PACKAGES.put('versions/${appId}/${version}.json', JSON.stringify(app));
             await env.WIDEFLEET_PACKAGES.put('hosts/127.0.0.1.json', JSON.stringify(app));
+            await env.WIDEFLEET_PACKAGES.put(${JSON.stringify(cronReportKey(appId))}, JSON.stringify({ url: ${JSON.stringify(`${telemetryOrigin}/crons`)}, token: 'fixture-cron-only' }));
             const spaRules = '/* /index.html 200\\n';
             const spaHash = '${"6".repeat(32)}';
             await env.WIDEFLEET_PACKAGES.put('apps/${appId}/assets/' + spaHash, spaRules);
@@ -974,10 +983,45 @@ describe.runIf(process.env["RUN_DYNAMIC_TESTS"] === "1")(
           background: true,
         });
       await expect.poll(() => call("cron-result"), { timeout: 70000 }).toBe(true);
+      await expect
+        .poll(() => cronReports().find((run) => run.trigger === "schedule" && run.finishedAt), {
+          timeout: 10000,
+        })
+        .toMatchObject({ cron: "* * * * *", deploymentId, error: null });
       await stop();
       await start();
       expect(await call("queue-result")).toMatchObject({ background: true, settled: true });
       expect(await call("database-read")).toEqual(42);
     }, 95000);
+
+    it("starts a declared schedule on demand and reports it through the same path", async () => {
+      const manual = (
+        body: { appId: string; hostname: string; runId: string; cron: string },
+        token = "fixture-only",
+      ) =>
+        fetch(`${origin}/.well-known/widefleet/crons`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+      const runId = crypto.randomUUID();
+      const request = { appId, hostname: "127.0.0.1", runId, cron: "* * * * *" };
+
+      expect((await manual(request, "wrong")).status).toBe(403);
+      expect((await manual({ ...request, cron: "0 0 * * *" })).status).toBe(400);
+      expect((await manual({ ...request, appId: crypto.randomUUID() })).status).toBe(400);
+
+      const started = await manual(request);
+      expect(await started.json()).toEqual({ runId });
+      await expect
+        .poll(() => cronReports().find((run) => run.id === runId && run.finishedAt), {
+          timeout: 20000,
+        })
+        .toMatchObject({ trigger: "manual", cron: "* * * * *", deploymentId, error: null });
+      expect(
+        cronReports().filter((run) => run.id === runId && run.finishedAt === null),
+      ).toHaveLength(1);
+    }, 30000);
   },
 );

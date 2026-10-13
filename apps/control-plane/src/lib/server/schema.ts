@@ -160,10 +160,20 @@ export const jobs = pgTable(
     agentId: uuid("agent_id").references(() => agents.id),
     deploymentId: uuid("deployment_id").references(() => deployments.id),
     kind: text({
-      enum: ["deploy", "runtime", "connector", "delete", "configure", "migrations", "workflows"],
+      enum: [
+        "deploy",
+        "runtime",
+        "connector",
+        "delete",
+        "configure",
+        "migrations",
+        "workflows",
+        "crons",
+      ],
     }).notNull(),
     migration: jsonb(),
     workflow: jsonb(),
+    cron: text(),
     rollback: boolean().notNull().default(false),
     access: jsonb(),
     network: jsonb(),
@@ -191,6 +201,24 @@ export const jobs = pgTable(
       table.sequence.desc(),
     ),
   ],
+);
+
+export const cronRuns = pgTable(
+  "cron_run",
+  {
+    id: uuid().primaryKey(),
+    appId: uuid("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    deploymentId: uuid("deployment_id").notNull(),
+    cron: text().notNull(),
+    trigger: text({ enum: ["schedule", "manual"] }).notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    error: text(),
+  },
+  (table) => [index("cron_run_app_started_idx").on(table.appId, table.startedAt.desc())],
 );
 
 export const deploymentEvents = pgTable("deployment_event", {

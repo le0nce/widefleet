@@ -31,6 +31,18 @@ pub async fn destination(
     let Some(credentials) = credentials else {
         return Ok(None);
     };
+    Ok(Some(TelemetryDestination {
+        url: platform_endpoint(
+            api,
+            configuration,
+            &format!("/api/v1/telemetry/{}", job.app_id()?),
+        )?,
+        token: credentials.token,
+    }))
+}
+
+/// A management URL reachable from the runtime, which can differ from the agent's API origin.
+pub fn platform_endpoint(api: &Api, configuration: &Configuration, path: &str) -> Result<String> {
     let origin = configuration
         .runtime_platform_url
         .as_deref()
@@ -45,11 +57,8 @@ pub async fn destination(
     {
         return Err(Error::invalid("Use an HTTPS runtime platform origin; HTTP is allowed only for a local HTTP installation".into()));
     }
-    url.set_path(&format!("/api/v1/telemetry/{}", job.app_id()?));
-    Ok(Some(TelemetryDestination {
-        url: url.to_string(),
-        token: credentials.token,
-    }))
+    url.set_path(path);
+    Ok(url.to_string())
 }
 
 pub fn changed(current: &[String], requested: &[String]) -> bool {

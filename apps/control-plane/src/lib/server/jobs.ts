@@ -85,7 +85,7 @@ export const createJobService = (
 
       return Result.ok(agent);
     }),
-  claim: (agentId: string, accessRules = false) =>
+  claim: (agentId: string, accessRules = false, cronRuns = false) =>
     transact(database, async (transaction) => {
       const [agent] = await transaction
         .select()
@@ -140,6 +140,23 @@ export const createJobService = (
             .where(eq(apps.id, candidate.job.appId))
             .for("update")
         : [];
+
+      if (candidate.job.kind === "crons" && !cronRuns) {
+        // A manual run is optional work: fail it rather than block the fleet's queue.
+        await transaction
+          .update(jobs)
+          .set({
+            state: "failed",
+            finishedAt: new Date(),
+            result: {
+              outcome: "failed",
+              message: "Upgrade the deployment agent to run Cron schedules on demand",
+            },
+          })
+          .where(eq(jobs.id, candidate.job.id));
+
+        return Result.ok(null);
+      }
 
       if (app && app.accessRevision > 0 && !accessRules && candidate.job.kind !== "delete")
         return Result.err(
@@ -251,6 +268,7 @@ export const createJobService = (
           kind: claimed.kind,
           migration: claimed.migration,
           workflow: claimed.workflow,
+          cron: claimed.cron,
           appId: claimed.appId,
           hostname: candidate.hostname,
           deploymentId: claimed.deploymentId,
@@ -424,7 +442,8 @@ export const createJobService = (
           lease.kind === "runtime" ||
           lease.kind === "connector" ||
           lease.kind === "migrations" ||
-          lease.kind === "workflows"
+          lease.kind === "workflows" ||
+          lease.kind === "crons"
         ) {
           if (
             lease.kind === "workflows" &&
@@ -445,7 +464,8 @@ export const createJobService = (
           if (
             result.outcome === "succeeded" &&
             lease.kind !== "migrations" &&
-            lease.kind !== "workflows"
+            lease.kind !== "workflows" &&
+            lease.kind !== "crons"
           ) {
             await transaction
               .update(fleets)

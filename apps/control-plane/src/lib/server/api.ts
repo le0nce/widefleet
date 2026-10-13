@@ -293,6 +293,45 @@ export const createApi = (runtime: Runtime) => {
       .handler(async ({ context, input }) =>
         unwrap(await runtime.workflows.read(context.principal, input.appId, input.jobId)),
       ),
+    cronSchedules: read
+      .route({ method: "GET", path: "/apps/{appId}/crons" })
+      .input(contract.appPath)
+      .output(z.array(contract.cronSchedule))
+      .handler(async ({ context, input }) =>
+        unwrap(await runtime.crons.schedules(context.principal, input.appId)),
+      ),
+    cronRuns: read
+      .route({ method: "GET", path: "/apps/{appId}/crons/runs" })
+      .input(contract.appPath.extend(contract.cronRunsQuery.shape))
+      .output(z.array(contract.cronRun))
+      .handler(async ({ context, input }) => {
+        const { appId, ...query } = input;
+
+        return unwrap(await runtime.crons.runs(context.principal, appId, query));
+      }),
+    runCron: write
+      .route({ method: "POST", path: "/apps/{appId}/crons/runs" })
+      .input(contract.appPath.extend(contract.cronRunRequest.shape))
+      .output(contract.cronOperation)
+      .handler(async ({ context, input }) => {
+        const { appId, ...request } = input;
+
+        return unwrap(
+          await runtime.crons.run(
+            context.principal,
+            appId,
+            idempotencyKey(context.request),
+            request,
+          ),
+        );
+      }),
+    cronOperation: read
+      .route({ method: "GET", path: "/apps/{appId}/crons/operations/{jobId}" })
+      .input(contract.appPath.extend({ jobId: contract.identifier }))
+      .output(contract.cronOperation)
+      .handler(async ({ context, input }) =>
+        unwrap(await runtime.crons.operation(context.principal, input.appId, input.jobId)),
+      ),
     createMigration: write
       .route({ method: "POST", path: "/apps/{appId}/migrations" })
       .input(contract.migrationRequest.safeExtend(contract.appPath.shape))
@@ -580,10 +619,16 @@ export const createApi = (runtime: Runtime) => {
       ),
     claimJob: agent
       .route({ method: "POST", path: "/agent/jobs/claim" })
-      .input(z.object({ accessRules: z.literal(1).optional() }).default({}))
+      .input(
+        z
+          .object({ accessRules: z.literal(1).optional(), cronRuns: z.literal(1).optional() })
+          .default({}),
+      )
       .output(contract.job.nullable())
       .handler(async ({ context, input }) =>
-        unwrap(await runtime.jobs.claim(context.agent.id, input.accessRules === 1)),
+        unwrap(
+          await runtime.jobs.claim(context.agent.id, input.accessRules === 1, input.cronRuns === 1),
+        ),
       ),
     heartbeat: agent
       .route({ method: "POST", path: "/agent/jobs/{jobId}/heartbeat" })
@@ -626,6 +671,17 @@ export const createApi = (runtime: Runtime) => {
 
         return runtime.telemetry.credentials(artifact.appId);
       }),
+    cronReportCredentials: agent
+      .route({ method: "GET", path: "/agent/jobs/{jobId}/crons" })
+      .input(leaseInput)
+      .output(contract.cronReportCredentials)
+      .handler(async ({ context, input }) => {
+        const artifact = unwrap(
+          await runtime.jobs.artifact(context.agent.id, input.jobId, input.leaseToken),
+        );
+
+        return runtime.crons.credentials(artifact.appId);
+      }),
   };
 
   const handler = new OpenAPIHandler(router);
@@ -641,6 +697,16 @@ export const createApi = (runtime: Runtime) => {
         contract.identifier.parse(telemetry[1]),
         z.enum(["logs", "traces"]).parse(telemetry[2]),
       );
+
+    const cronReport = /^\/api\/v1\/crons\/([^/]+)\/runs$/.exec(url.pathname);
+
+    if (cronReport && request.method === "POST") {
+      const appId = contract.identifier.safeParse(cronReport[1]);
+
+      return appId.success
+        ? runtime.crons.ingest(request, appId.data)
+        : new Response("Cron report source is unavailable", { status: 404 });
+    }
 
     if (url.pathname === "/api/v1/openapi.json" && request.method === "GET") {
       unwrap(await runtime.identity.authenticate(request, "platform:read"));

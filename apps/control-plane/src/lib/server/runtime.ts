@@ -13,6 +13,7 @@ import { createConnectorService } from "./connectors.ts";
 import { createAppAccessService } from "./app-access.ts";
 import { createNetworkService } from "./network.ts";
 import { createWorkflowService } from "./workflows.ts";
+import { createCronService } from "./crons.ts";
 import { createMigrationService } from "./migrations.ts";
 import { createJobService } from "./jobs.ts";
 import { createUploadService } from "./uploads.ts";
@@ -107,6 +108,7 @@ const createRuntime = async () => {
     network: createNetworkService(database.db),
     appAccess: createAppAccessService(database.db),
     workflows: createWorkflowService(database.db),
+    crons: createCronService(database.db, configuration),
     migrations: createMigrationService(database.db, storage),
     connectors: createConnectorService(database.db, storage, encryptionKey),
     releases: createRuntimeReleaseService(database.db, storage),

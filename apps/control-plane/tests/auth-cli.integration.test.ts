@@ -1,4 +1,5 @@
 import { createWorkflowService } from "../src/lib/server/workflows.ts";
+import { createCronService } from "../src/lib/server/crons.ts";
 import { createMigrationService } from "../src/lib/server/migrations.ts";
 import { execFile } from "node:child_process";
 import { once } from "node:events";
@@ -162,6 +163,7 @@ describe.runIf(process.env["RUN_CLI_TESTS"] === "1" && process.platform !== "win
         network: createNetworkService(database),
         appAccess: createAppAccessService(database),
         workflows: createWorkflowService(database),
+        crons: createCronService(database, configuration),
         migrations: createMigrationService(database, storage),
         connectors: createConnectorService(
           database,

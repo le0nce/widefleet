@@ -5,7 +5,7 @@ use platform_core::{
     Error, Result,
     model::{
         Artifact, Binding, ConnectorPackage, Job, JobKind, PublishedApp, ReleaseModule,
-        RuntimePackages,
+        RuntimePackages, RuntimeRelease,
     },
     sha256,
 };
@@ -124,6 +124,7 @@ pub async fn prepare(
     packages: &RuntimePackages,
     directory: &Path,
     telemetry: Option<platform_core::model::TelemetryDestination>,
+    cron_reports: Option<platform_core::model::TelemetryDestination>,
 ) -> Result<Prepared> {
     validate_connector_classes(&packages.connectors)?;
     if packages.runtime.protocol != 1 || packages.runtime.celld != crate::native::VERSION {
@@ -197,6 +198,18 @@ pub async fn prepare(
         }),
         None => None,
     };
+    if let (Some(app), Some(destination)) = (&candidate, &cron_reports) {
+        // Per app rather than in the immutable snapshot, which older loaders validate strictly.
+        put(
+            &store,
+            &package_key(
+                job,
+                &format!("apps/{}/cron-reports.json", app.artifact.app_id),
+            ),
+            serde_json::to_vec(destination)?,
+        )
+        .await?;
+    }
     if let Some(app) = &mut candidate {
         if let Some(snapshot) = &job.capabilities {
             for (name, grant) in &snapshot.grants {
@@ -531,7 +544,7 @@ pub async fn prepare(
     // whose management acknowledgment has not arrived yet.
     let probes = match job.kind {
         JobKind::Runtime | JobKind::Connector => current,
-        JobKind::Delete | JobKind::Migrations | JobKind::Workflows => Vec::new(),
+        JobKind::Delete | JobKind::Migrations | JobKind::Workflows | JobKind::Crons => Vec::new(),
         JobKind::Deploy | JobKind::Configure => candidate.iter().cloned().collect(),
     };
     Ok(Prepared {
@@ -974,14 +987,19 @@ pub async fn remove(configuration: &Configuration, job: &Job) -> Result<()> {
     Ok(())
 }
 
-pub async fn workflow_control(configuration: &Configuration, job: &Job) -> Result<Option<String>> {
+/// The runtime control token, if the installed runtime supports the requested protocol.
+pub async fn control_token(
+    configuration: &Configuration,
+    job: &Job,
+    supported: impl FnOnce(&RuntimeRelease) -> bool,
+) -> Result<Option<String>> {
     let store = configuration.storage.resolve()?.object_store()?;
     let Some(bytes) = read(&store, &format!("{}/installed-packages.json", prefix(job))).await?
     else {
         return Ok(None);
     };
     let installed: RuntimePackages = serde_json::from_slice(&bytes)?;
-    if installed.runtime.workflows != Some(1) {
+    if !supported(&installed.runtime) {
         return Ok(None);
     }
     let token = read(&store, &format!("{}/control-token", prefix(job)))
