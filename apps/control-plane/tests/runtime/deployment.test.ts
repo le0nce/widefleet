@@ -1610,6 +1610,24 @@ describe.runIf(runRuntime)("CLI, agent and celld with persistent D1/R2", () => {
     await agent();
     expect(await read("/fixture/crons")).toEqual({ "* * * * *": [app.hostname] });
 
+    // celld validates schedules while the job is staged; the live fleet keeps serving.
+    config["triggers"] = { crons: ["*/60 * * * *"] };
+    await writeFile(join(appDirectory, "wrangler.jsonc"), JSON.stringify(config));
+    await cli("deploy", app.id, "--skip-build", "--no-wait");
+    await expect(agent()).rejects.toThrow();
+
+    const [rejected] = z
+      .array(contract.deployment)
+      .parse(JSON.parse((await cli("history", app.id)).stdout));
+
+    expect(rejected?.status).toBe("failed");
+    expect(rejected?.message).toContain(
+      'cron expression "*/60 * * * *": minute field has a step 60 outside 1-59',
+    );
+    expect(rejected?.message).not.toContain("Stack backtrace");
+    expect(await read("/fixture/crons")).toEqual({ "* * * * *": [app.hostname] });
+    expect(await read("/?operation=kv")).toMatchObject({ count: 3 });
+
     config["triggers"] = { crons: [] };
     await writeFile(join(appDirectory, "wrangler.jsonc"), JSON.stringify(config));
     await hold();

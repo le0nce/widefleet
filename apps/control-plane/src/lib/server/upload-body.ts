@@ -1,4 +1,4 @@
-import { cronExpression, moduleName, workerMetadata } from "@platform/contracts";
+import { moduleName, workerMetadata } from "@platform/contracts";
 import { Result } from "better-result";
 import { z } from "zod";
 import { InvalidOperation } from "./errors.ts";
@@ -74,60 +74,45 @@ export const parseWorkerUpload = (request: Request) =>
   Result.gen(async function* () {
     const bytes = yield* Result.await(readBody(request, 100 * 1024 * 1024));
 
-    const upload = yield* Result.await(
-      Result.tryPromise({
-        try: async () => {
-          const form = await new Response(bytes, {
-            headers: { "content-type": request.headers.get("content-type") ?? "" },
-          }).formData();
+    return Result.tryPromise({
+      try: async () => {
+        const form = await new Response(bytes, {
+          headers: { "content-type": request.headers.get("content-type") ?? "" },
+        }).formData();
 
-          const metadataPart = form.getAll("metadata");
+        const metadataPart = form.getAll("metadata");
 
-          if (metadataPart.length !== 1) throw new Error("Exactly one metadata part is required");
-          const value = metadataPart[0];
-          const metadataText = value instanceof File ? await value.text() : z.string().parse(value);
+        if (metadataPart.length !== 1) throw new Error("Exactly one metadata part is required");
+        const value = metadataPart[0];
+        const metadataText = value instanceof File ? await value.text() : z.string().parse(value);
 
-          if (metadataText.length > 64 * 1024) throw new Error("Metadata is too large");
-          const metadata = workerMetadata.parse(JSON.parse(metadataText));
-          const modules: WorkerModule[] = [];
+        if (metadataText.length > 64 * 1024) throw new Error("Metadata is too large");
+        const metadata = workerMetadata.parse(JSON.parse(metadataText));
+        const modules: WorkerModule[] = [];
 
-          for (const [name, part] of form.entries()) {
-            if (name === "metadata") continue;
+        for (const [name, part] of form.entries()) {
+          if (name === "metadata") continue;
 
-            if (!(part instanceof File)) throw new Error("Worker modules must be file parts");
+          if (!(part instanceof File)) throw new Error("Worker modules must be file parts");
 
-            if (part.size > 20 * 1024 * 1024 || modules.length >= 532)
-              throw new Error("Worker module limit exceeded");
-            modules.push({
-              name: moduleName.parse(name),
-              type: moduleType.parse(part.type),
-              bytes: new Uint8Array(await part.arrayBuffer()),
-            });
-          }
+          if (part.size > 20 * 1024 * 1024 || modules.length >= 532)
+            throw new Error("Worker module limit exceeded");
+          modules.push({
+            name: moduleName.parse(name),
+            type: moduleType.parse(part.type),
+            bytes: new Uint8Array(await part.arrayBuffer()),
+          });
+        }
 
-          if (modules.filter((module) => module.type !== "sourcemap").length > 32)
-            throw new Error("Too many runtime modules");
+        if (modules.filter((module) => module.type !== "sourcemap").length > 32)
+          throw new Error("Too many runtime modules");
 
-          if (modules.filter((module) => module.type === "sourcemap").length > 500)
-            throw new Error("Too many source maps");
+        if (modules.filter((module) => module.type === "sourcemap").length > 500)
+          throw new Error("Too many source maps");
 
-          return { metadata, modules };
-        },
-        catch: () =>
-          new InvalidOperation({ code: "BAD_REQUEST", message: "Invalid worker multipart upload" }),
-      }),
-    );
-
-    // Stored artifacts keep the lenient schema: earlier uploads must remain readable.
-    const schedules = z.array(cronExpression).safeParse(upload.metadata.crons);
-
-    if (!schedules.success)
-      return Result.err(
-        new InvalidOperation({
-          code: "BAD_REQUEST",
-          message: schedules.error.issues.map((issue) => issue.message).join("; "),
-        }),
-      );
-
-    return Result.ok(upload);
+        return { metadata, modules };
+      },
+      catch: () =>
+        new InvalidOperation({ code: "BAD_REQUEST", message: "Invalid worker multipart upload" }),
+    });
   });

@@ -677,6 +677,19 @@ pub async fn publish(
     put(&store, &primary, primary_bytes).await
 }
 
+/// celld's message without its build log and stack backtrace, which deployment events would otherwise show.
+fn publish_error(stderr: &str) -> &str {
+    stderr
+        .split_once("Error: ")
+        .map(|(_, message)| {
+            message
+                .split_once("\n\n")
+                .map_or(message, |(message, _)| message)
+        })
+        .unwrap_or(stderr)
+        .trim()
+}
+
 async fn stage(
     configuration: &Configuration,
     job: &Job,
@@ -711,7 +724,7 @@ async fn stage(
         if !output.status.success() {
             return Err(Error::invalid(format!(
                 "celld publish failed: {}",
-                String::from_utf8_lossy(&output.stderr)
+                publish_error(&String::from_utf8_lossy(&output.stderr))
             )));
         }
     }
@@ -1013,6 +1026,19 @@ pub async fn control_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn publish_errors_keep_only_the_celld_message() {
+        let stderr = " celld 0.6.2\n───\nBundled widefleet (0.01 sec)\nError: cron expression \"*/60 * * * *\": minute field has a step 60 outside 1-59 in \"*/60\"\n\nStack backtrace:\n   0: <unknown>\n";
+        assert_eq!(
+            publish_error(stderr),
+            "cron expression \"*/60 * * * *\": minute field has a step 60 outside 1-59 in \"*/60\""
+        );
+        assert_eq!(
+            publish_error("  unexpected failure\n"),
+            "unexpected failure"
+        );
+    }
 
     #[test]
     fn rejects_class_reuse_across_selected_connectors_but_allows_local_aliases() {

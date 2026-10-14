@@ -218,7 +218,8 @@ export const workerMetadata = z
       .refine((flags) => new Set(flags).size === flags.length, "Compatibility flags must be unique")
       .default([]),
     bindings: z.array(workerBinding).max(32).default([]),
-    crons: z.array(z.string().min(1)).default([]),
+    // celld hands the trimmed expression to the handler; the runtime routes by the stored text.
+    crons: z.array(z.string().trim().min(1)).default([]),
     queue_consumers: z.array(queueConsumer).default([]),
     assets: z.strictObject({ upload_session: identifier, binding: bindingName.default("ASSETS") }),
     debug: debugMetadata.optional(),

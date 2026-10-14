@@ -1772,21 +1772,8 @@ describe("Platform API with PostgreSQL and RustFS", () => {
       .where(eq(jobs.id, listing.id));
   });
 
-  it("validates Cron schedules, records scoped run reports and queues manual runs", async () => {
+  it("normalizes Cron schedules, records scoped run reports and queues manual runs", async () => {
     const app = await createApp("cron-history");
-
-    const invalid = await publish(
-      app.id,
-      (await start(app.id)).id,
-      undefined,
-      undefined,
-      adminHeaders,
-      [],
-      ["*/60 * * * *"],
-    );
-
-    expect(invalid.status).toBe(400);
-    expect(await invalid.text()).toContain("minute field has a step 60 outside 1-59");
 
     const deployment = contract.deployment.parse(
       await (
@@ -1797,7 +1784,8 @@ describe("Platform API with PostgreSQL and RustFS", () => {
           undefined,
           adminHeaders,
           [],
-          ["*/5 * * * *", "0 9 * * 2-6"],
+          // celld passes the trimmed text to the handler; routing must use the same key.
+          [" */5 * * * *", "0 9 * * 2-6\t"],
         )
       ).json(),
     );
