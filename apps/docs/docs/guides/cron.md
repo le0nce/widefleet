@@ -81,11 +81,13 @@ The day fields also accept these forms:
 When both day fields are restricted, a day matches either one: `0 0 1 * MON` runs on
 the first of each month and on every Monday.
 
-`widefleet deploy` fails when the Worker upload contains an invalid expression, before
-anything is activated. The error names the expression and the field, for example
-`Cron expression "*/60 * * * *": minute field has a step 60 outside 1-59 in "*/60"`. Widefleet
-rejects descending ranges such as `SAT-SUN`, `*` inside a list, leading or trailing
-spaces and steps wider than their field.
+An invalid expression fails that deployment before anything is activated; the
+serving version and other apps' schedules keep running. The deployment message names
+the expression and the field, for example
+`cron expression "*/60 * * * *": minute field has a step 60 outside 1-59 in "*/60"`.
+Read it with `widefleet history APP_UUID` or in the app's **Deployments** tab.
+Descending ranges such as `SAT-SUN`, `*` inside a list and steps wider than their
+field are rejected. Leading and trailing spaces are removed.
 
 ## How scheduled runs behave
 
@@ -150,7 +152,7 @@ wait while deployments are in progress.
 
 | Symptom                                                                       | Resolution                                                                                                                             |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment fails with `Cron expression …`                                     | Fix the named field. Check the weekday numbering above.                                                                                |
+| Deployment fails with `cron expression …`                                     | Fix the named field and deploy again. Check the weekday numbering above.                                                               |
 | Schedules run but no history appears                                          | Deploy the app again. Apps deployed before the upgrade receive their report credentials with the next deployment or permission change. |
 | `Install an app runtime with Cron support before running schedules on demand` | Ask an administrator to update the app runtime to 0.3.0 or newer.                                                                      |
 | `Upgrade the deployment agent to run Cron schedules on demand`                | Ask an administrator to upgrade the deployment agent to the management version.                                                        |
